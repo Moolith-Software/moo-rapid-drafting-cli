@@ -1,0 +1,12 @@
+{
+  "name": "rapid-prototyping-tool",
+  "private": true,
+  "type": "module",
+  "workspaces": [],
+  "scripts": {
+    "test:functions": "deno test --allow-env --allow-net --config supabase/functions/deno.json supabase/functions/tests/"
+  },
+  "devDependencies": {
+    "deno": "^2.1.0"
+  }
+}

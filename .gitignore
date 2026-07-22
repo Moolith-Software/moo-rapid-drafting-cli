@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.log
+
+# secrets
+supabase/functions/.env
+.env
+.env.local
+
+# tauri (later)
+src-tauri/target/
+
+# os
+.DS_Store
