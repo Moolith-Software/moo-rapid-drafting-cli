@@ -4,9 +4,13 @@ import type { ProviderConfig } from "../config.ts";
 import { AppError, flatten } from "../errors.ts";
 import { LIMITS } from "../limits.ts";
 
-/** Map our provider-agnostic messages onto the Messages API shape, translating
- *  `cache: true` into `cache_control` breakpoints. */
-function buildParams(
+/**
+ * Map our provider-agnostic messages onto the Messages API shape, translating
+ * `cacheable: true` into `cache_control` breakpoints (max 4 per request).
+ * Exported for testing — this mapping's failure mode is SILENT (a missing
+ * breakpoint just means full price forever, with no error).
+ */
+export function buildParams(
   req: GenerateRequest,
   model: string,
   maxTokens: number,
@@ -15,11 +19,13 @@ function buildParams(
   const messages: Anthropic.MessageParam[] = [];
 
   for (const m of req.messages as Message[]) {
-    const cc = m.cache ? { cache_control: { type: "ephemeral" as const } } : {};
+    const cc = m.cacheable ? { cache_control: { type: "ephemeral" as const } } : {};
     if (m.role === "system") {
       system.push({ type: "text", text: m.content, ...cc });
     } else {
-      const content = m.cache ? [{ type: "text" as const, text: m.content, ...cc }] : m.content;
+      const content = m.cacheable
+        ? [{ type: "text" as const, text: m.content, ...cc }]
+        : m.content;
       messages.push({ role: m.role, content });
     }
   }
@@ -61,11 +67,17 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
           .filter((b): b is Anthropic.TextBlock => b.type === "text")
           .map((b) => b.text)
           .join("");
+
+        // Anthropic's input_tokens EXCLUDES cached + cache-created tokens, so
+        // sum all three to get the TOTAL our Usage contract promises.
+        const cacheRead = msg.usage.cache_read_input_tokens ?? 0;
+        const cacheWrite = msg.usage.cache_creation_input_tokens ?? 0;
         return {
           text,
           usage: {
-            inputTokens: msg.usage.input_tokens,
-            cacheReadTokens: msg.usage.cache_read_input_tokens ?? undefined,
+            inputTokens: msg.usage.input_tokens + cacheRead + cacheWrite,
+            cacheReadTokens: cacheRead,
+            cacheWriteTokens: cacheWrite,
           },
         };
       } catch (e) {
@@ -74,8 +86,9 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
     },
     async warm(req): Promise<void> {
       try {
-        // Minimal output — the point is the cache write.
-        await client.messages.create(buildParams(req, model(req), 1));
+        // max_tokens: 0 is the documented pre-warm form — writes the cache,
+        // returns empty content, bills no output tokens.
+        await client.messages.create(buildParams(req, model(req), 0));
       } catch (e) {
         throw toAppError(e);
       }

@@ -34,7 +34,7 @@ Deno.test("pipeline: injects the active system prompt as a cached first message"
   const sent = seen[0].messages;
   assertEquals(sent.length, 2); // injected system + the caller's message
   assertEquals(sent[0].role, "system");
-  assertEquals(sent[0].cache, true); // marks the stable prefix for caching
+  assertEquals(sent[0].cacheable, true); // marks the stable prefix for caching
   assertStringIncludes(sent[0].content, "Vue 3");
   assertEquals(sent[1].content, "add a button");
 });

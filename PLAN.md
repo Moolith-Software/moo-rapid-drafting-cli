@@ -202,8 +202,8 @@ supabase/functions/
     errors.ts         // AppError → flattened 200 | 500
     prompts/index.ts  // versioned prompts; ACTIVE_PROMPT_VERSION picked server-side
     providers/
-      anthropic.ts    // @anthropic-ai/sdk; timeout+maxRetries:0 on the client
-      openai.ts       // openai SDK; timeout+maxRetries:0 on the client
+      anthropic.ts    // @anthropic-ai/sdk, Messages API + cache_control mapping
+      openai.ts       // openai SDK, RESPONSES API (not Chat Completions), store:false
       mock.ts         // configurable (text | empty | throw)
       registry.ts     // AI_PROVIDER → provider (reads env inline)
   generate/

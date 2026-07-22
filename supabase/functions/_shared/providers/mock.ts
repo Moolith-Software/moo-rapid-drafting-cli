@@ -23,7 +23,7 @@ export function createMockProvider(config: MockConfig = {}): Provider {
       if (config.throwBefore) return fail();
       return Promise.resolve({
         text: config.empty ? "" : (config.text ?? "// mock generated change"),
-        usage: { inputTokens: 0, cacheReadTokens: 0 },
+        usage: { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       });
     },
     warm(): Promise<void> {

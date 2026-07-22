@@ -7,11 +7,11 @@ import { LIMITS } from "./limits.ts";
 /**
  * One turn in the conversation.
  *
- * | field   | on the wire | parsed type                     | default | notes
- * |---------|-------------|---------------------------------|---------|-------
- * | role    | required    | "system"|"user"|"assistant"      | —       | who the message is from
- * | content | required    | string (min 1)                   | —       | the text; empty is rejected
- * | cache   | omittable   | boolean (never undefined)        | false   | mark a STABLE segment to cache
+ * | field     | on the wire | parsed type                   | default | notes
+ * |-----------|-------------|-------------------------------|---------|-------
+ * | role      | required    | "system"|"user"|"assistant"    | —       | who the message is from
+ * | content   | required    | string (min 1)                 | —       | the text; empty is rejected
+ * | cacheable | omittable   | boolean (never undefined)      | false   | segment is STABLE across calls
  *
  * `role` — the handler injects the system prompt itself, so clients normally
  * send only `user` turns (plus `assistant` turns when replaying a conversation).
@@ -20,16 +20,19 @@ import { LIMITS } from "./limits.ts";
  *
  * `content` — for the codebase message this is the serialized files map.
  *
- * `cache` — uses .default(false), NOT .optional(): callers may omit it, but
- * after verification it is ALWAYS a concrete boolean, so no downstream code
- * ever handles `undefined`. Defaulting to false is also the safer direction —
- * a missed `true` merely loses a cache hit, whereas a wrong `true` puts a cache
+ * `cacheable` — declares a PROPERTY of the content ("this doesn't change between
+ * calls"), it does not command the provider to cache. Each adapter decides what
+ * to do with it: Anthropic places a `cache_control` breakpoint, OpenAI an
+ * explicit prompt-cache breakpoint. Uses .default(false), NOT .optional():
+ * callers may omit it, but after verification it is ALWAYS a concrete boolean,
+ * so no downstream code handles `undefined`. False is the safer default — a
+ * missed `true` merely loses a cache hit, whereas a wrong `true` puts a
  * breakpoint on content that changes every call.
  */
 export const MessageSchema = z.object({
   role: z.enum(["system", "user", "assistant"]),
   content: z.string().min(1),
-  cache: z.boolean().default(false),
+  cacheable: z.boolean().default(false),
 });
 
 /**

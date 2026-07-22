@@ -7,13 +7,13 @@ Deno.test("verify: accepts a valid request", () => {
   const req = verifyRequest({
     model: "claude-opus-4-8",
     messages: [
-      { role: "user", content: "the codebase", cache: true },
+      { role: "user", content: "the codebase", cacheable: true },
       { role: "user", content: "add a button" },
     ],
   });
   assertEquals(req.model, "claude-opus-4-8");
   assertEquals(req.messages.length, 2);
-  assertEquals(req.messages[0].cache, true);
+  assertEquals(req.messages[0].cacheable, true);
 });
 
 Deno.test("verify: model optional", () => {
@@ -24,7 +24,7 @@ Deno.test("verify: model optional", () => {
 Deno.test("verify: cache defaults to false when omitted", () => {
   const req = verifyRequest({ messages: [{ role: "user", content: "hi" }] });
   // omittable on the wire, but never undefined after verification
-  assertEquals(req.messages[0].cache, false);
+  assertEquals(req.messages[0].cacheable, false);
 });
 
 Deno.test("verify: rejects non-object body", () => {
@@ -49,7 +49,7 @@ Deno.test("verify: rejects empty content", () => {
 
 Deno.test("verify: rejects non-boolean cache", () => {
   assertThrows(
-    () => verifyRequest({ messages: [{ role: "user", content: "x", cache: "yes" }] }),
+    () => verifyRequest({ messages: [{ role: "user", content: "x", cacheable: "yes" }] }),
     AppError,
   );
 });

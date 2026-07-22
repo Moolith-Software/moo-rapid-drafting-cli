@@ -20,7 +20,7 @@ export function getProvider(env: Env): Provider {
     case "openai":
       return createOpenAIProvider({
         apiKey: env.get("OPENAI_API_KEY") ?? "",
-        model: env.get("OPENAI_MODEL") ?? "gpt-5",
+        model: env.get("OPENAI_MODEL") ?? "gpt-5.6-sol",
       });
     case "mock":
       return createMockProvider();

@@ -23,7 +23,7 @@ export async function runGenerate(
   const providerReq: GenerateRequest = {
     model: gen.model,
     messages: [
-      { role: "system", content: activePrompt.system, cache: true },
+      { role: "system", content: activePrompt.system, cacheable: true },
       ...gen.messages,
     ],
   };

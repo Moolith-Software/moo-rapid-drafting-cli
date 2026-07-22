@@ -18,8 +18,8 @@ _shared/
   errors.ts           AppError + flatten
   prompts/index.ts    versioned prompts; ACTIVE_PROMPT_VERSION picked here
   providers/
-    anthropic.ts      @anthropic-ai/sdk + cache_control mapping (thin)
-    openai.ts         openai SDK (automatic prefix caching) (thin)
+    anthropic.ts      @anthropic-ai/sdk, Messages API + cache_control mapping
+    openai.ts         openai SDK, RESPONSES API (not Chat Completions)
     mock.ts           configurable (text | empty | throw)
     registry.ts       AI_PROVIDER → provider (reads env inline)
 generate/
@@ -31,6 +31,37 @@ tests/                deno test suite (uses the mock — no keys, no network)
 Providers use the **official SDKs** (`@anthropic-ai/sdk`, `openai`) — the client's
 `timeout` option enforces our 2-min limit and `maxRetries: 0` disables retries.
 Exact versions are pinned in `deno.lock`.
+
+**OpenAI uses the Responses API**, not Chat Completions: materially better cache
+utilization, better reasoning-model performance, and Chat Completions doesn't
+support tool calling with reasoning models from GPT-5.4 on (which would block the
+file-read tool we may need for large codebases). `store: false` is always set —
+we send whole codebases and the client owns conversation state.
+
+## Caching
+
+`cacheable: true` marks a segment as stable; each adapter translates it:
+
+| | Anthropic (Opus 4.8) | OpenAI (GPT-5.6+) |
+|---|---|---|
+| minimum to cache | 1,024 tokens | 1,024 tokens |
+| control | `cache_control`, ≤4 breakpoints | explicit breakpoints, ≤4 writes |
+| TTL | 5 min (1h at 2× write) | 30 min (only option) |
+| write / read cost | 1.25× / 0.1× | 1.25× / discounted |
+| verify via | `cache_read_input_tokens` | `input_tokens_details.cached_tokens` |
+
+`warm()` pre-writes the cache. This matters because **a cache entry is only
+readable after the first response completes** — firing N parallel requests cold
+means N writes and zero reads. Warm once, then fan out.
+
+`Usage.inputTokens` is **normalized to the total** across providers: Anthropic's
+native `input_tokens` excludes cached/cache-created tokens (we sum all three),
+OpenAI's already includes them. Without that the hit ratio would mean different
+things per provider.
+
+⚠️ Not yet wired: OpenAI's `prompt_cache_key` is **required on GPT-5.6+ for
+reliable cache matching**. It needs the base-state ID, which doesn't exist until
+the orchestrator (M3).
 
 ## Test (no keys, fast, deterministic)
 

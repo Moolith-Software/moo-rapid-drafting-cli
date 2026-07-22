@@ -5,17 +5,24 @@ import type { GenerateRequest, Message } from "./contract.ts";
 export type { GenerateRequest, Message };
 
 /**
- * Caching instrument. These two are a PAIR, not independent metrics:
- * `cacheReadTokens / inputTokens` is the cache hit ratio, which is the only way
- * to detect that prompt caching has silently stopped working (e.g. a
- * non-deterministic codebase serialization changing the cached prefix bytes).
- * Both are optional because providers differ in what they report.
+ * Caching instrument. `cacheReadTokens / inputTokens` is the cache hit ratio —
+ * the only way to detect that prompt caching has silently stopped working (e.g.
+ * a non-deterministic codebase serialization changing the cached prefix bytes).
+ * `cacheWriteTokens` confirms a write actually happened, which is how we verify
+ * warm() did anything. Optional because providers differ in what they report.
+ *
+ * IMPORTANT: `inputTokens` is NORMALIZED to the TOTAL input across providers.
+ * The vendors disagree natively — Anthropic's `input_tokens` EXCLUDES cached and
+ * cache-created tokens, while OpenAI's INCLUDES cached ones — so the adapters
+ * reconcile it. Without that, the hit ratio means different things per provider.
  */
 export interface Usage {
-  /** Tokens sent (system prompt + codebase + request) — the ratio denominator. */
+  /** TOTAL input tokens: fresh + cache-written + cache-read. Ratio denominator. */
   inputTokens?: number;
-  /** How many of those were served from cache — the ratio numerator. */
+  /** How many were served from cache — ratio numerator. */
   cacheReadTokens?: number;
+  /** How many were written to cache — confirms warm()/first-write happened. */
+  cacheWriteTokens?: number;
 }
 
 export interface GenerateResult {
