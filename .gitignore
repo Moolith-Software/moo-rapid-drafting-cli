@@ -3,6 +3,9 @@ dist/
 build/
 *.log
 
+# generated output of scripts/request-feature.mjs
+toy-model-generated/
+
 # secrets
 supabase/functions/.env
 .env

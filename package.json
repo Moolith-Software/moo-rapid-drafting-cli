@@ -4,7 +4,9 @@
   "type": "module",
   "workspaces": [],
   "scripts": {
-    "test:functions": "deno test --allow-env --allow-net --config supabase/functions/deno.json supabase/functions/tests/"
+    "test:functions": "deno test --allow-env --allow-net --config supabase/functions/deno.json supabase/functions/tests/",
+    "request-feature": "node scripts/request-feature.mjs",
+    "serve:generate": "deno run --allow-env --allow-net --allow-read --env-file=supabase/functions/.env --config supabase/functions/deno.json supabase/functions/generate/index.ts"
   },
   "devDependencies": {
     "deno": "^2.1.0"

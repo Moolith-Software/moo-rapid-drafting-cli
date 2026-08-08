@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "toy-model-generated",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "toy-model-generated"],
+      "port": 5173,
+      "autoPort": true
+    }
+  ]
+}
