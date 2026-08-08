@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev", "--prefix", "toy-model-generated"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "toy-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "toy-implementation/frontend"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }
