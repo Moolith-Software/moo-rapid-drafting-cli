@@ -1,133 +1,95 @@
 """
-Thin wrapper around the OpenAI Codex CLI (`codex exec`).
+Thin wrapper around the OpenAI Codex Python SDK (`openai-codex`).
 
 Codex is the agent that does the real work: it traverses the codebase, decides
-which files matter, sends them to OpenAI, and writes the edits back to disk. We
-just point it at a folder, hand it a prompt, and stream its progress.
+which files matter, sends them to OpenAI, and writes edits back to disk. The SDK
+wraps the same Codex engine as the CLI, but gives us typed results, structured
+output, and — crucially — thread management (fork / resume) for our feature tree.
 
-We run it non-interactively:
+One `run_turn` call = one turn (one input → the agent's full autonomous loop →
+one result). We choose the thread up front:
 
-    codex exec -C <dir> -s workspace-write --skip-git-repo-check --json \
-               -o <last-message-file> "<prompt>"
+  fresh feature   -> thread_start                (new session)
+  child feature   -> thread_fork(parent_session) (branch; parent left untouched)
+  refinement      -> thread_resume(own_session)  (linear continuation)
 
-  -s workspace-write   let it edit files inside the folder (nothing outside)
-  --skip-git-repo-check the CoW clone is not a git repo, that's fine
-  --json               emit one JSON event per line so we can show live status
-  -o <file>            write the agent's final message (our summary) to a file
+Auth: we log in with the API key into a project-local CODEX_HOME, so Codex never
+falls back to a stale global `codex login` session.
+
+Note: we use the blocking `thread.run()` for an authoritative TurnResult. The SDK
+also offers `thread.turn().stream()` for live token-level notifications — a good
+upgrade for finer progress once we can observe the event flow with a real key.
 """
 
-import json
 import os
-import subprocess
-import tempfile
 from pathlib import Path
 from typing import Callable
 
-# Point Codex at a clean, project-local config dir instead of the user's global
-# ~/.codex. That global dir may hold a stale `codex login` (ChatGPT) session whose
-# expired token Codex prefers over OPENAI_API_KEY — causing "Failed to refresh
-# token" errors. With an empty CODEX_HOME and no stored login, Codex falls back to
-# OPENAI_API_KEY (from backend/.env) and talks to api.openai.com directly.
+from openai_codex import Codex, CodexConfig, Sandbox
+
+# Project-local Codex home: isolates auth + persisted session ("rollout") files
+# from the user's global ~/.codex. Session ids we store in the DB point in here,
+# so this directory is durable state, not a throwaway.
 CODEX_HOME = Path(__file__).parent / ".codex_home"
 
 
-def run_codex(workspace: Path, prompt: str, on_progress: Callable[[str], None]) -> dict:
+def run_turn(
+    *,
+    workspace: Path,
+    prompt: str,
+    output_schema: dict,
+    on_progress: Callable[[str], None],
+    session_id: str | None = None,
+    fork_from: str | None = None,
+) -> dict:
     """
-    Run Codex over `workspace` with `prompt`. Calls `on_progress(line)` with a
-    short human-readable string as the agent works. Blocks until Codex exits, so
-    call this from a background thread.
+    Run one Codex turn over `workspace`. Exactly one of the thread modes applies:
+    fork_from (branch), session_id (resume), or neither (fresh start).
 
-    Returns {"ok": bool, "summary": str, "exit_code": int}.
+    Returns {ok, final_response, session_id, usage, error}. Blocks until the turn
+    finishes, so call from a background thread.
     """
-    # A temp file to capture the agent's final message = our summary text.
-    summary_file = Path(tempfile.mktemp(suffix="-codex-summary.txt"))
-
-    cmd = [
-        "codex", "exec",
-        "-C", str(workspace),
-        "-s", "workspace-write",
-        "--skip-git-repo-check",
-        "--json",
-        "-o", str(summary_file),
-    ]
-    model = os.environ.get("CODEX_MODEL")
-    if model:
-        cmd += ["-m", model]
-    cmd.append(prompt)
-
-    # Isolate Codex in a project-local CODEX_HOME and log in with our API key.
-    CODEX_HOME.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "CODEX_HOME": str(CODEX_HOME)}
-    _ensure_login(env)
-
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(workspace),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,  # line-buffered
-        env=env,
-    )
-
-    # Stream stdout line by line, turning each JSON event into a status blurb.
-    for line in proc.stdout:
-        line = line.strip()
-        if not line:
-            continue
-        blurb = _summarize_event(line)
-        if blurb:
-            on_progress(blurb)
-
-    proc.wait()
-
-    summary = ""
-    if summary_file.exists():
-        summary = summary_file.read_text(encoding="utf-8").strip()
-        summary_file.unlink(missing_ok=True)
-
-    return {"ok": proc.returncode == 0, "summary": summary, "exit_code": proc.returncode}
-
-
-def _ensure_login(env: dict) -> None:
-    """
-    Write our API key into CODEX_HOME/auth.json via `codex login --with-api-key`.
-
-    This Codex version does not send OPENAI_API_KEY as a bearer on its own — the
-    key must be stored by an explicit login. We do it before every run so the
-    stored auth always matches the current key in backend/.env.
-    """
-    api_key = env.get("OPENAI_API_KEY", "").strip()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set — add it to backend/.env")
-    subprocess.run(
-        ["codex", "login", "--with-api-key"],
-        input=api_key,
-        text=True,
-        env=env,
-        capture_output=True,
-        check=True,
-    )
+
+    CODEX_HOME.mkdir(parents=True, exist_ok=True)
+    config = CodexConfig(env={**os.environ, "CODEX_HOME": str(CODEX_HOME)})
+
+    with Codex(config) as codex:
+        codex.login_api_key(api_key)  # write API-key auth into our CODEX_HOME
+
+        cwd = str(workspace)
+        if fork_from:
+            thread = codex.thread_fork(fork_from, cwd=cwd, sandbox=Sandbox.workspace_write)
+        elif session_id:
+            thread = codex.thread_resume(session_id, cwd=cwd, sandbox=Sandbox.workspace_write)
+        else:
+            thread = codex.thread_start(cwd=cwd, sandbox=Sandbox.workspace_write)
+
+        on_progress("Codex is working…")
+        result = thread.run(prompt, output_schema=output_schema)
+
+        return {
+            "ok": result.error is None,
+            "final_response": result.final_response or "",
+            "session_id": thread.id,
+            "usage": _usage_dict(result.usage),
+            "error": str(result.error) if result.error else None,
+        }
 
 
-def _summarize_event(line: str) -> str:
-    """
-    Turn one `--json` event line into a short status string for the UI. The event
-    schema can shift between Codex versions, so we stay defensive: pull the first
-    useful text we find, otherwise fall back to the event type name.
-    """
-    try:
-        event = json.loads(line)
-    except json.JSONDecodeError:
-        return line[:120]  # not JSON? show the raw text, truncated
-
-    # Events are typically {"type": "...", "msg"/"item": {...}}. Dig for text.
-    kind = event.get("type") or event.get("msg", {}).get("type") or "working"
-    payload = event.get("item") or event.get("msg") or event
-
-    for key in ("text", "message", "command", "title", "reasoning"):
-        value = payload.get(key) if isinstance(payload, dict) else None
-        if isinstance(value, str) and value.strip():
-            return f"{kind}: {value.strip()[:120]}"
-
-    return str(kind)
+def _usage_dict(usage) -> dict:
+    """Best-effort dict of token usage (fields vary), for cache-hit logging."""
+    if usage is None:
+        return {}
+    if hasattr(usage, "model_dump"):
+        try:
+            return usage.model_dump()
+        except Exception:
+            pass
+    return {
+        k: getattr(usage, k)
+        for k in dir(usage)
+        if not k.startswith("_") and isinstance(getattr(usage, k, None), (int, float))
+    }

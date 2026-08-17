@@ -4,11 +4,18 @@ const BASE = "http://localhost:8000";
 
 export type Change = { path: string; kind: "created" | "edited" | "deleted" };
 
+// The AI human-readable layer (structured); file changes stay deterministic.
+export type FeatureSummary = {
+  feature_title: string;
+  summary: string;
+  highlights: string[];
+};
+
 export type Refinement = {
   refinement_id: number;
   user_request: string;
   file_changes: Change[];
-  summary: string;
+  summary: FeatureSummary;
 };
 
 export type Feature = {
@@ -17,10 +24,11 @@ export type Feature = {
   code_folder_name: string;
   feature: string;
   file_changes: Change[];
-  summary: string;
+  summary: FeatureSummary;
   refinements: Refinement[];
   status: string;
   progress: string;
+  codex_session_id: string | null;
   created_at: number;
 };
 

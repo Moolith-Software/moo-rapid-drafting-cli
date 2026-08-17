@@ -24,6 +24,7 @@ from pydantic import BaseModel
 import db
 import engine
 import preview
+import workspace_manager
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -69,14 +70,14 @@ class RefineBody(BaseModel):
 
 @app.post("/features/initialize")
 def initialize(body: InitializeBody) -> dict:
-    """Create an empty feature row and its CoW workspace name. No AI runs yet."""
+    """
+    Create an empty feature row. The workspace folder name is assigned later, at
+    clone time (engine.run_add), so it can carry a per-clone UUID — that keeps the
+    copy step create-only (it never has to delete an existing folder).
+    """
     if not body.feature.strip():
         raise HTTPException(400, "feature must not be empty")
-    # Create the row first so we can name the folder after its id.
-    feature = db.create_feature(body.feature.strip(), code_folder_name="pending", parent_id=body.parent_id)
-    folder = f"feature-{feature['id']}"
-    db.update_feature(feature["id"], code_folder_name=folder)
-    return db.get_feature(feature["id"])
+    return db.create_feature(body.feature.strip(), code_folder_name="pending", parent_id=body.parent_id)
 
 
 @app.post("/features/add")
@@ -116,7 +117,7 @@ def status(feature_id: int) -> dict:
 @app.post("/preview/base")
 def preview_base() -> dict:
     """Start (or reuse) a dev server for the pristine base app."""
-    return preview.start_preview("base", engine.BASE_DIR)
+    return preview.start_preview("base", workspace_manager.BASE_DIR)
 
 
 @app.post("/features/{feature_id}/preview")
@@ -125,7 +126,7 @@ def preview_feature(feature_id: int) -> dict:
     feature = db.get_feature(feature_id)
     if not feature:
         raise HTTPException(404, "feature not found")
-    workspace = engine.WORKSPACES_DIR / feature["code_folder_name"]
+    workspace = workspace_manager.path_for(feature["code_folder_name"])
     if not workspace.exists():
         raise HTTPException(409, "workspace not built yet")
     return preview.start_preview(feature["code_folder_name"], workspace)

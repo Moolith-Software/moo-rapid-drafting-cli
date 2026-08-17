@@ -135,7 +135,15 @@ function statusClass(status: string) {
         {{ f.progress }}
       </p>
 
-      <p v-if="f.summary" class="summary">{{ f.summary }}</p>
+      <div v-if="f.summary && f.summary.summary" class="summary">
+        <strong v-if="f.summary.feature_title" class="feature-title">
+          {{ f.summary.feature_title }}
+        </strong>
+        <p class="summary-text">{{ f.summary.summary }}</p>
+        <ul v-if="f.summary.highlights.length" class="highlights">
+          <li v-for="(h, i) in f.summary.highlights" :key="i">{{ h }}</li>
+        </ul>
+      </div>
 
       <ul v-if="f.file_changes.length" class="changes">
         <li v-for="c in f.file_changes" :key="c.path">
@@ -146,7 +154,10 @@ function statusClass(status: string) {
       <div v-if="f.refinements.length" class="refinements">
         <div v-for="r in f.refinements" :key="r.refinement_id" class="refinement">
           <em>Refinement {{ r.refinement_id }}:</em> {{ r.user_request }}
-          <p class="summary">{{ r.summary }}</p>
+          <p class="summary-text">{{ r.summary.summary }}</p>
+          <ul v-if="r.summary.highlights.length" class="highlights">
+            <li v-for="(h, i) in r.summary.highlights" :key="i">{{ h }}</li>
+          </ul>
         </div>
       </div>
 
@@ -238,6 +249,10 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .request { margin: 0.25rem 0; }
 .progress { color: #b45309; font-size: 0.85rem; font-style: italic; }
 .summary { color: #334155; background: #f8fafc; padding: 0.5rem 0.75rem; border-radius: 8px; }
+.feature-title { display: block; color: #0f172a; margin-bottom: 0.25rem; }
+.summary-text { margin: 0.25rem 0; color: #334155; }
+.highlights { margin: 0.25rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: #475569; }
+.highlights li { padding: 0.1rem 0; }
 .changes { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.85rem; }
 .changes li { padding: 0.15rem 0; font-family: ui-monospace, monospace; }
 .kind {

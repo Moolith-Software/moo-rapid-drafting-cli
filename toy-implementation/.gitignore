@@ -5,6 +5,7 @@ backend/.env
 backend/data/
 backend/workspaces/
 backend/.codex_home/
+.codex_playground_home/
 
 # Python
 __pycache__/

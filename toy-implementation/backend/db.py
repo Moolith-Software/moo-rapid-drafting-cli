@@ -25,7 +25,7 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create the features table if it does not exist yet."""
+    """Create the features table if needed, then apply lightweight migrations."""
     conn = connect()
     conn.execute(
         """
@@ -33,28 +33,52 @@ def init_db() -> None:
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             parent_id      INTEGER,                       -- set for nested / refinement lineage
             code_folder_name TEXT NOT NULL,               -- the CoW workspace folder name
-            feature        TEXT NOT NULL,                 -- the original feature request
-            file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}
-            summary        TEXT NOT NULL DEFAULT '',       -- AI-written human-readable summary
+            feature        TEXT NOT NULL,                 -- the original (possibly rough) feature request
+            file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}, deterministic
+            summary        TEXT NOT NULL DEFAULT '{}',     -- JSON: FeatureSummary (AI human-readable layer)
             refinements    TEXT NOT NULL DEFAULT '[]',    -- JSON: [{refinement_id, user_request, file_changes, summary}]
             status         TEXT NOT NULL DEFAULT 'initialized',
             progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
+            codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
             created_at     REAL NOT NULL
         )
         """
     )
     conn.commit()
+
+    # Migration: add columns that older databases may be missing.
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(features)")}
+    if "codex_session_id" not in existing:
+        conn.execute("ALTER TABLE features ADD COLUMN codex_session_id TEXT")
+        conn.commit()
     conn.close()
 
 
-# JSON columns we transparently decode when reading a row out.
-_JSON_COLUMNS = ("file_changes", "refinements")
+# JSON columns we transparently encode on write.
+_JSON_COLUMNS = ("file_changes", "refinements", "summary")
+
+
+def _normalize_summary(raw) -> dict:
+    """
+    Decode the summary column into a FeatureSummary-shaped dict, tolerating old
+    rows that stored a plain string (or empty) before we moved to structured JSON.
+    """
+    if isinstance(raw, dict):
+        return raw
+    try:
+        value = json.loads(raw)
+        if isinstance(value, dict):
+            return value
+        return {"feature_title": "", "summary": str(value), "highlights": []}
+    except (json.JSONDecodeError, TypeError):
+        return {"feature_title": "", "summary": raw or "", "highlights": []}
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
     data = dict(row)
-    for col in _JSON_COLUMNS:
-        data[col] = json.loads(data[col])
+    data["file_changes"] = json.loads(data["file_changes"])
+    data["refinements"] = json.loads(data["refinements"])
+    data["summary"] = _normalize_summary(data["summary"])
     return data
 
 

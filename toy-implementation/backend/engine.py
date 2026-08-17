@@ -1,36 +1,27 @@
-"""
-The Feature Engine — the boxes from the flow diagram, one function each:
-
-  Copy Codebase       -> clone_base() / clone_from()   (macOS copy-on-write)
-  Pre-cache / Warm     -> warm()                        (placeholder, see note)
-  Setup preview/build  -> setup_preview()               (placeholder, see note)
-  Execute AI           -> codex_runner.run_codex()      (does the real editing)
-  Status Emit          -> emit()                        (writes status to SQLite)
-
-`run_add` and `run_refine` string these together and are meant to be launched on
-a background thread so the HTTP request returns immediately and the frontend
-polls for status.
-"""
-
-import hashlib
-import subprocess
-import time
 from pathlib import Path
 
 import db
-from codex_runner import run_codex
+import schemas
+import codex_runner
+from changes import diff_snapshots, snapshot
+from workspace_manager import (
+    WorkspaceCopyError,
+    clone_base,
+    clone_from,
+    new_folder_name,
+    path_for,
+)
 
-BACKEND_DIR = Path(__file__).parent
-BASE_DIR = BACKEND_DIR.parent / "base"            # the pristine seed codebase
-WORKSPACES_DIR = BACKEND_DIR / "workspaces"       # per-feature CoW clones live here
-
-# Files/dirs we ignore when detecting what Codex changed.
-SKIP = {"node_modules", "dist", ".git", ".DS_Store"}
+# The structured response contract we ask Codex to fill (human-readable only).
+OUTPUT_SCHEMA = schemas.FeatureSummary.model_json_schema()
 
 
 # --- Status Emit -----------------------------------------------------------
 
-def emit(feature_id: int, status: str | None = None, progress: str | None = None) -> None:
+
+def emit(
+    feature_id: int, status: str | None = None, progress: str | None = None
+) -> None:
     """Write the current status/progress to the DB so the /status endpoint sees it."""
     fields = {}
     if status is not None:
@@ -41,187 +32,215 @@ def emit(feature_id: int, status: str | None = None, progress: str | None = None
         db.update_feature(feature_id, **fields)
 
 
-# --- Copy Codebase (copy-on-write) -----------------------------------------
-
-def clone_base(folder_name: str) -> Path:
-    """CoW-clone the pristine base/ into workspaces/<folder_name>."""
-    return _cow_copy(BASE_DIR, WORKSPACES_DIR / folder_name)
-
-
-def clone_from(source_folder: str, folder_name: str) -> Path:
-    """CoW-clone an existing workspace (e.g. a parent feature) into a new one."""
-    return _cow_copy(WORKSPACES_DIR / source_folder, WORKSPACES_DIR / folder_name)
-
-
-def _cow_copy(source: Path, dest: Path) -> Path:
-    """
-    Clone `source` to `dest` using APFS copy-on-write (`cp -c`). This is near
-    instant and takes no extra disk until files are modified, so cloning the
-    whole app (node_modules and all) is cheap. Falls back to a normal copy if
-    the filesystem does not support clonefile.
-    """
-    WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        subprocess.run(["rm", "-rf", str(dest)], check=True)
-    result = subprocess.run(["cp", "-c", "-R", str(source), str(dest)])
-    if result.returncode != 0:  # not APFS? fall back to a plain copy
-        subprocess.run(["cp", "-R", str(source), str(dest)], check=True)
-    return dest
-
-
 # --- Pre-cache / Warm (placeholder) ----------------------------------------
+
 
 def warm(workspace: Path) -> None:
     """
     Placeholder for the 'warm the LLM on this codebase' box.
 
-    OpenAI applies prompt caching automatically on repeated prefixes, so there is
-    no explicit warm call to make with the Codex CLI. In a fuller build this is
-    where you would prime a cache across several parallel features at once. We
-    keep the step here to stay faithful to the diagram.
+    OpenAI applies prompt caching automatically on repeated prefixes, and Codex
+    reads files via tool calls rather than a static prompt prefix, so there is no
+    single codebase blob to pre-warm here. Kept to stay faithful to the diagram.
     """
     return None
 
 
 # --- Setup preview / build tools (placeholder) -----------------------------
 
+
 def setup_preview(workspace: Path) -> None:
     """
-    Placeholder for the 'setup preview / build tools' box.
-
-    Because each workspace is a CoW clone of base/ (which already has
-    node_modules), it is immediately runnable — you can `cd` into it and
-    `npm run dev` to preview. Automating a managed dev server is out of scope for
-    this prototype.
+    Placeholder for the 'setup preview / build tools' box. Real previewing is
+    handled on demand by preview.py (each workspace is a runnable CoW clone).
     """
     return None
 
 
 # --- Execute AI + full pipelines -------------------------------------------
 
+
 def run_add(feature_id: int) -> None:
     """
-    Full 'features/add' pipeline for a brand new feature. Run on a background
-    thread. Emits status at every step so the frontend can poll along.
+    Full 'features/add' pipeline for a new feature. Run on a background thread.
+    A child (parent_id set) CoW-clones the parent's workspace AND forks the
+    parent's Codex session; a top-level feature clones base/ and starts fresh.
     """
     feature = db.get_feature(feature_id)
     try:
-        emit(feature_id, status="copying", progress="Cloning the codebase (copy-on-write)…")
+        emit(
+            feature_id,
+            status="copying",
+            progress="Cloning the codebase (copy-on-write)…",
+        )
+        # Assign the workspace name now, with a per-clone UUID so the target is
+        # always fresh — the copy never has to overwrite/delete anything. Record
+        # the pointer on the row before cloning.
+        folder = new_folder_name(feature_id)
+        db.update_feature(feature_id, code_folder_name=folder)
+
+        fork_from = None
         if feature["parent_id"]:
             parent = db.get_feature(feature["parent_id"])
-            workspace = clone_from(parent["code_folder_name"], feature["code_folder_name"])
+            workspace = clone_from(parent["code_folder_name"], folder)
+            fork_from = parent.get("codex_session_id")  # branch the session too
         else:
-            workspace = clone_base(feature["code_folder_name"])
+            workspace = clone_base(folder)
 
         emit(feature_id, status="warming", progress="Preparing the model…")
         warm(workspace)
         setup_preview(workspace)
 
-        emit(feature_id, status="running", progress="Codex is implementing the feature…")
+        emit(
+            feature_id, status="running", progress="Codex is implementing the feature…"
+        )
         before = snapshot(workspace)
-        result = run_codex(
-            workspace,
-            _add_prompt(feature["feature"]),
-            on_progress=lambda line: emit(feature_id, progress=line),
+        result = _execute(
+            feature_id, workspace, _add_prompt(feature["feature"]), fork_from=fork_from
         )
         after = snapshot(workspace)
-        changes = diff_snapshots(before, after)
 
-        if result["ok"]:
-            emit(feature_id, status="completed", progress="Done.")
-            db.update_feature(
-                feature_id,
-                file_changes=changes,
-                summary=result["summary"] or f"Applied {len(changes)} file change(s).",
-            )
-        else:
-            emit(feature_id, status="failed", progress=f"Codex exited with code {result['exit_code']}.")
-    except Exception as exc:  # keep the row honest if anything blows up
+        _finish(feature_id, result, file_changes=diff_snapshots(before, after))
+    except WorkspaceCopyError as exc:  # clone step failed — report it distinctly
+        detail = f": {exc.message}" if exc.message else ""
+        emit(feature_id, status="failed", progress=f"[{exc.code}] {exc.title}{detail}")
+    except Exception as exc:  # any other failure (Codex, DB, snapshot, …)
         emit(feature_id, status="failed", progress=f"Error: {exc}")
 
 
 def run_refine(feature_id: int, user_request: str) -> None:
     """
-    Full 'features/refine' pipeline. Re-runs Codex on the SAME workspace so the
-    refinement builds on the prior change, then appends a refinement object (with
-    an AI-written summary) to the feature.
+    Full 'features/refine' pipeline. Resumes the feature's OWN Codex session so
+    the refinement builds on the prior turn's real history, then appends a
+    refinement object (with an AI-written summary) to the feature.
     """
     feature = db.get_feature(feature_id)
-    workspace = WORKSPACES_DIR / feature["code_folder_name"]
+    workspace = path_for(feature["code_folder_name"])
     try:
         emit(feature_id, status="running", progress="Codex is refining the feature…")
         before = snapshot(workspace)
-        result = run_codex(
+        result = _execute(
+            feature_id,
             workspace,
             _refine_prompt(feature, user_request),
-            on_progress=lambda line: emit(feature_id, progress=line),
+            session_id=feature.get("codex_session_id"),
         )
         after = snapshot(workspace)
         changes = diff_snapshots(before, after)
 
         refinements = feature["refinements"]
-        refinements.append({
-            "refinement_id": len(refinements) + 1,
-            "user_request": user_request,
-            "file_changes": changes,
-            "summary": result["summary"] or f"Applied {len(changes)} file change(s).",
-        })
-        db.update_feature(feature_id, refinements=refinements)
+        refinements.append(
+            {
+                "refinement_id": len(refinements) + 1,
+                "user_request": user_request,
+                "file_changes": changes,
+                "summary": _parse_summary(result["final_response"]),
+            }
+        )
+        _log_usage(feature_id, result["usage"])
+        db.update_feature(
+            feature_id, refinements=refinements, codex_session_id=result["session_id"]
+        )
         emit(
             feature_id,
             status="completed" if result["ok"] else "failed",
-            progress="Done." if result["ok"] else f"Codex exited with code {result['exit_code']}.",
+            progress="Done." if result["ok"] else f"Codex error: {result['error']}",
         )
     except Exception as exc:
         emit(feature_id, status="failed", progress=f"Error: {exc}")
 
 
+def _execute(feature_id, workspace, prompt, session_id=None, fork_from=None) -> dict:
+    """
+    Run one Codex turn, with a fallback: if resuming/forking a prior session
+    fails (it was GC'd or .codex_home was cleared), retry as a fresh session on
+    the current code snapshot — correct, minus history/cache for that turn.
+    """
+
+    def prog(line: str) -> None:
+        emit(feature_id, progress=line)
+
+    try:
+        return codex_runner.run_turn(
+            workspace=workspace,
+            prompt=prompt,
+            output_schema=OUTPUT_SCHEMA,
+            on_progress=prog,
+            session_id=session_id,
+            fork_from=fork_from,
+        )
+    except Exception:
+        if session_id or fork_from:  # we had a prior session to lose — recover fresh
+            prog(
+                "Prior Codex session unavailable — starting fresh from the code snapshot…"
+            )
+            return codex_runner.run_turn(
+                workspace=workspace,
+                prompt=prompt,
+                output_schema=OUTPUT_SCHEMA,
+                on_progress=prog,
+            )
+        raise
+
+
+def _finish(feature_id: int, result: dict, file_changes: list) -> None:
+    """Store the deterministic diff + structured summary + session id, set status."""
+    _log_usage(feature_id, result["usage"])
+    db.update_feature(
+        feature_id,
+        file_changes=file_changes,
+        summary=_parse_summary(result["final_response"]),
+        codex_session_id=result["session_id"],
+    )
+    emit(
+        feature_id,
+        status="completed" if result["ok"] else "failed",
+        progress="Done." if result["ok"] else f"Codex error: {result['error']}",
+    )
+
+
+def _parse_summary(final_response: str) -> dict:
+    """Validate Codex's reply against FeatureSummary; fall back to raw text."""
+    try:
+        return schemas.FeatureSummary.model_validate_json(final_response).model_dump()
+    except Exception:
+        return schemas.FeatureSummary(
+            feature_title="",
+            summary=final_response.strip() or "(no summary returned)",
+            highlights=[],
+        ).model_dump()
+
+
+def _log_usage(feature_id: int, usage: dict) -> None:
+    """Print token usage so we can watch cached-vs-fresh across fork/resume."""
+    if usage:
+        print(f"[feature {feature_id}] token usage: {usage}", flush=True)
+
+
 def _add_prompt(feature: str) -> str:
     return (
         "You are editing an existing Vue 3 + TypeScript + Vite app.\n"
-        "Implement the following feature request by editing the files directly.\n"
-        "Match the existing code style and keep the app building.\n"
-        "When you are done, briefly summarise what you changed in plain English.\n\n"
+        "Apply all changes by editing files directly on disk. Match the existing "
+        "code style and keep the app building.\n"
+        "Do NOT include file contents, code, or a list of changed files in your "
+        "response — changed files are detected automatically from the filesystem. "
+        "Your response is only the human-readable summary.\n\n"
         f"Feature request:\n{feature}"
     )
 
 
 def _refine_prompt(feature: dict, user_request: str) -> str:
-    history = feature["summary"] or feature["feature"]
+    # Resuming a session already carries the real history; we include a compact
+    # recap so the fresh-session fallback still has context.
+    recap = feature["summary"].get("summary") or feature["feature"]
     return (
-        "You are refining a change you made earlier to this Vue 3 + TypeScript app.\n"
-        f"The feature so far:\n{history}\n\n"
-        "Apply the following refinement by editing the files directly, keeping the "
-        "existing style, and keeping the app building. When done, briefly summarise "
-        "what you changed in plain English.\n\n"
+        "You are refining a feature in this Vue 3 + TypeScript app, continuing "
+        "your earlier work.\n"
+        f"What the feature does so far: {recap}\n\n"
+        "Apply the refinement by editing files directly on disk, keeping the "
+        "existing style and keeping the app building.\n"
+        "Do NOT include file contents or a change list in your response — changes "
+        "are detected from the filesystem. Your response is only the "
+        "human-readable summary.\n\n"
         f"Refinement request:\n{user_request}"
     )
-
-
-# --- Change detection (snapshot diff, since workspaces aren't git repos) ----
-
-def snapshot(root: Path) -> dict:
-    """Map every source file (relative path -> content hash), skipping SKIP dirs."""
-    out = {}
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in SKIP for part in path.relative_to(root).parts):
-            continue
-        rel = str(path.relative_to(root))
-        out[rel] = hashlib.md5(path.read_bytes()).hexdigest()
-    return out
-
-
-def diff_snapshots(before: dict, after: dict) -> list[dict]:
-    """Compare two snapshots into a list of {path, kind} where kind is created/edited/deleted."""
-    changes = []
-    for path, digest in after.items():
-        if path not in before:
-            changes.append({"path": path, "kind": "created"})
-        elif before[path] != digest:
-            changes.append({"path": path, "kind": "edited"})
-    for path in before:
-        if path not in after:
-            changes.append({"path": path, "kind": "deleted"})
-    return sorted(changes, key=lambda c: c["path"])
