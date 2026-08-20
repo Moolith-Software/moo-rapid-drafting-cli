@@ -1,0 +1,56 @@
+[
+  {
+    "id": "refund-late-order",
+    "input": "Hi, I ordered a lamp two weeks ago (order A-1042) and it still hasn't shipped. I want my money back.",
+    "expected": {
+      "category": "refund",
+      "urgency": "high",
+      "must_mention": ["A-1042"]
+    }
+  },
+  {
+    "id": "password-reset",
+    "input": "I can't log in. The reset password email never arrives. My account is jo@example.com.",
+    "expected": {
+      "category": "account",
+      "urgency": "medium",
+      "must_mention": ["jo@example.com"]
+    }
+  },
+  {
+    "id": "shipping-eta",
+    "input": "Just checking when order B-77 is expected to arrive? No rush at all.",
+    "expected": {
+      "category": "shipping",
+      "urgency": "low",
+      "must_mention": ["B-77"]
+    }
+  },
+  {
+    "id": "broken-item",
+    "input": "The blender I received (order C-9001) arrived cracked and leaks everywhere. This is a safety issue.",
+    "expected": {
+      "category": "defect",
+      "urgency": "high",
+      "must_mention": ["C-9001"]
+    }
+  },
+  {
+    "id": "billing-double-charge",
+    "input": "I was charged twice for order D-3311 on my card this morning. Please fix.",
+    "expected": {
+      "category": "billing",
+      "urgency": "high",
+      "must_mention": ["D-3311"]
+    }
+  },
+  {
+    "id": "general-praise",
+    "input": "Nothing wrong! Order E-5 was great, just wanted to say the packaging was lovely.",
+    "expected": {
+      "category": "other",
+      "urgency": "low",
+      "must_mention": ["E-5"]
+    }
+  }
+]
