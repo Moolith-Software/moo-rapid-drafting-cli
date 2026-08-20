@@ -1,0 +1,120 @@
+"""
+The two feature pipelines: adding a feature, and refining one.
+
+This module is only the *order* of the steps. Each step lives elsewhere:
+
+    core.instances        get a runnable instance ready (its own copy of the code)
+    core.ai.operations.features     ask the AI to build or refine it
+    core.changes          work out what actually changed on disk
+    db                    record status and results
+
+Both pipelines run on a background thread, so the HTTP request returns straight
+away and the frontend polls for status.
+
+A feature is modelled two ways at once, and they stay in step:
+
+    code    a child clones its parent's workspace
+    session a child forks its parent's session; a refinement resumes its own
+"""
+
+import db
+
+from . import changes, errors, instances, statuses
+from . import workspace_manager as workspaces
+from .ai.operations import features as feature_ai
+
+
+def run_add(feature_id: int) -> None:
+    """Prepare an instance, have the AI implement the feature, record the result."""
+    feature = db.get_feature(feature_id)
+    try:
+        db.set_status(feature_id, statuses.PREPARING, "Preparing a workspace…")
+        parent = db.get_feature(feature["parent_id"]) if feature["parent_id"] else None
+        instance = instances.prepare(feature_id, parent)
+        db.update_feature(feature_id, code_folder_name=instance.folder)
+
+        db.set_status(feature_id, statuses.RUNNING, "Implementing the feature…")
+        before = changes.snapshot(instance.workspace)
+        result = feature_ai.implement(
+            instance.workspace,
+            feature["feature"],
+            on_progress=lambda line: db.set_progress(feature_id, line),
+            session_id=instance.session_id,
+            fork_from=instance.fork_from,
+        )
+        after = changes.snapshot(instance.workspace)
+
+        db.update_feature(
+            feature_id,
+            file_changes=changes.diff_snapshots(before, after),
+            summary=result.summary,
+            codex_session_id=result.session_id,
+        )
+        _record_outcome(feature_id, result)
+
+    except Exception as exc:
+        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).message())
+
+
+def run_refine(feature_id: int, user_request: str) -> None:
+    """
+    Apply a follow-up request to a feature that already ran.
+
+    Resumes the feature's own session, so the AI continues from its real history
+    rather than being re-briefed, and edits the same workspace in place.
+    """
+    feature = db.get_feature(feature_id)
+    try:
+        db.set_status(feature_id, statuses.RUNNING, "Refining the feature…")
+        workspace = workspaces.path_for(feature["code_folder_name"])
+        recap = feature["summary"].get("summary") or feature["feature"]
+
+        before = changes.snapshot(workspace)
+        result = feature_ai.refine(
+            workspace,
+            recap,
+            user_request,
+            on_progress=lambda line: db.set_progress(feature_id, line),
+            session_id=feature["codex_session_id"],
+        )
+        after = changes.snapshot(workspace)
+
+        db.update_feature(
+            feature_id,
+            refinements=_append_refinement(
+                feature, user_request, changes.diff_snapshots(before, after), result
+            ),
+            codex_session_id=result.session_id,
+        )
+        _record_outcome(feature_id, result)
+
+    except Exception as exc:
+        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).message())
+
+
+# --- recording -------------------------------------------------------------
+
+
+def _append_refinement(
+    feature: dict, user_request: str, file_changes: list, result
+) -> list:
+    """Add this refinement to the feature's history."""
+    refinements = feature["refinements"]
+    return refinements + [
+        {
+            "refinement_id": len(refinements) + 1,
+            "user_request": user_request,
+            "file_changes": file_changes,
+            "summary": result.summary,
+        }
+    ]
+
+
+def _record_outcome(feature_id: int, result) -> None:
+    """Put the feature into its final state."""
+    if result.ok:
+        db.set_status(feature_id, statuses.COMPLETED, "Done.")
+    else:
+        db.set_status(
+            feature_id, statuses.FAILED, errors.ProviderFailed(result.error).message()
+        )

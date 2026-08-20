@@ -8,20 +8,11 @@ import subprocess
 import uuid
 from pathlib import Path
 
-BACKEND_DIR = Path(__file__).parent
+from .errors import CopyUnavailable, WorkspaceExists
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]  # this file lives in core/
 BASE_DIR = BACKEND_DIR.parent / "base"  # the pristine seed codebase
 WORKSPACES_DIR = BACKEND_DIR / "workspaces"  # per-feature CoW clones live here
-
-
-class WorkspaceCopyError(Exception):
-    """Raised when _cow_copy fails. Distinct type so callers can tell clone
-    failures apart from Codex/AI errors. `message` adds detail beyond `title`."""
-
-    def __init__(self, code: int, title: str, message: str = ""):
-        super().__init__(message or title)  # str(exc) is never empty
-        self.code = code
-        self.title = title
-        self.message = message
 
 
 def new_folder_name(feature_id: int) -> str:
@@ -62,9 +53,7 @@ def _cow_copy(source: Path, dest: Path) -> Path:
     """
     WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
     if dest.exists():
-        raise WorkspaceCopyError(1000, "Workspace already exists")
+        raise WorkspaceExists(str(dest))
     if subprocess.run(["cp", "-c", "-R", str(source), str(dest)]).returncode != 0:
-        raise WorkspaceCopyError(
-            1001, "Copy-on-write unavailable", f"{dest} is likely not on an APFS volume"
-        )
+        raise CopyUnavailable(f"{dest} is likely not on an APFS volume")
     return dest

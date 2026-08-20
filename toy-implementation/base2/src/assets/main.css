@@ -1,5 +1,0 @@
-@import "tailwindcss";
-
-.toast-rainbow {
-  background: linear-gradient(110deg, #e11d48, #f59e0b, #10b981, #2563eb, #7c3aed);
-}

@@ -22,9 +22,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import db
-import engine
 import preview
-import workspace_manager
+from core import pipelines, workspace_manager
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -72,7 +71,7 @@ class RefineBody(BaseModel):
 def initialize(body: InitializeBody) -> dict:
     """
     Create an empty feature row. The workspace folder name is assigned later, at
-    clone time (engine.run_add), so it can carry a per-clone UUID — that keeps the
+    clone time (pipelines.run_add), so it can carry a per-clone UUID — that keeps the
     copy step create-only (it never has to delete an existing folder).
     """
     if not body.feature.strip():
@@ -86,7 +85,7 @@ def add(body: IdBody, background: BackgroundTasks) -> dict:
     feature = db.get_feature(body.id)
     if not feature:
         raise HTTPException(404, "feature not found")
-    background.add_task(engine.run_add, body.id)
+    background.add_task(pipelines.run_add, body.id)
     return {"id": body.id, "status": "queued"}
 
 
@@ -98,7 +97,7 @@ def refine(body: RefineBody, background: BackgroundTasks) -> dict:
         raise HTTPException(404, "feature not found")
     if not body.user_request.strip():
         raise HTTPException(400, "user_request must not be empty")
-    background.add_task(engine.run_refine, body.id, body.user_request.strip())
+    background.add_task(pipelines.run_refine, body.id, body.user_request.strip())
     return {"id": body.id, "status": "queued"}
 
 

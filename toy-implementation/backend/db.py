@@ -12,6 +12,8 @@ import sqlite3
 import time
 from pathlib import Path
 
+from core import statuses
+
 # The database lives next to this file, under data/.
 DB_PATH = Path(__file__).parent / "data" / "app.db"
 
@@ -88,9 +90,9 @@ def create_feature(feature: str, code_folder_name: str, parent_id: int | None) -
     cur = conn.execute(
         """
         INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
-        VALUES (?, ?, ?, 'initialized', ?)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        (parent_id, code_folder_name, feature, time.time()),
+        (parent_id, code_folder_name, feature, statuses.INITIALIZED, time.time()),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -110,6 +112,16 @@ def list_features() -> list[dict]:
     rows = conn.execute("SELECT * FROM features ORDER BY created_at DESC").fetchall()
     conn.close()
     return [_row_to_dict(r) for r in rows]
+
+
+def set_status(feature_id: int, status: str, progress: str) -> None:
+    """Record a pipeline state change (what /status reports)."""
+    update_feature(feature_id, status=status, progress=progress)
+
+
+def set_progress(feature_id: int, progress: str) -> None:
+    """Record a live progress line without changing the status."""
+    update_feature(feature_id, progress=progress)
 
 
 def update_feature(feature_id: int, **fields) -> None:
