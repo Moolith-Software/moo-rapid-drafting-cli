@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from ...errors import TurnTimeout
-from .types import DEFAULT_TIMEOUT_SECONDS, Provider, TurnOutcome
+from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 
 class MockProvider(Provider):
@@ -24,12 +24,12 @@ class MockProvider(Provider):
 
     def __init__(
         self,
-        model: str | None = None,
-        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        timeout: float = MAX_TURN_TIMEOUT,
         note_file: str = "MOCK_CHANGE.md",
         simulate_timeout: bool = False,
     ):
-        super().__init__(model=model, timeout=timeout)
+        # No model: there is no real one to pick, so it stays None on the base.
+        super().__init__(timeout=timeout)
         self.note_file = note_file
         self.simulate_timeout = simulate_timeout
 

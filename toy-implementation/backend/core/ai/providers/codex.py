@@ -29,7 +29,7 @@ from typing import Callable
 from openai_codex import Codex, CodexConfig, Sandbox
 
 from ...errors import TurnTimeout
-from .types import DEFAULT_TIMEOUT_SECONDS, Provider, TurnOutcome
+from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 # Default location, at the backend root rather than beside this file — stored
 # session ids point into it, so it must not move when this module does.
@@ -43,7 +43,7 @@ class CodexProvider(Provider):
         self,
         api_key: str,
         model: str | None = None,
-        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        timeout: float = MAX_TURN_TIMEOUT,
         home: Path = DEFAULT_HOME,
     ):
         super().__init__(model=model, timeout=timeout)

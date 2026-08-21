@@ -29,7 +29,7 @@ class TurnOutcome:
 
 # How long a single turn may run before it is interrupted. A backstop for a hung
 # turn, not a target — big refactors legitimately run for many minutes.
-DEFAULT_TIMEOUT_SECONDS = 20 * 60
+MAX_TURN_TIMEOUT = 20 * 60
 
 
 class Provider(ABC):
@@ -40,7 +40,7 @@ class Provider(ABC):
     def __init__(
         self,
         model: str | None = None,
-        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        timeout: float = MAX_TURN_TIMEOUT,
     ):
         self.model = model  # None means the provider's own default
         self.timeout = timeout  # seconds a single turn may run

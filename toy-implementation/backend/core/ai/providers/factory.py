@@ -12,7 +12,7 @@ import os
 from typing import Mapping
 
 from ...errors import ConfigError
-from .types import DEFAULT_TIMEOUT_SECONDS, Provider
+from .types import MAX_TURN_TIMEOUT, Provider
 from .codex import CodexProvider
 from .mock import MockProvider
 
@@ -25,18 +25,17 @@ def create_provider(env: Mapping[str, str] | None = None) -> Provider:
     requested = (env.get("AI_PROVIDER") or "codex").strip().lower()
 
     # Config every provider takes, applied the same way to each.
-    timeout = float(DEFAULT_TIMEOUT_SECONDS)
-    model = env.get("AI_MODEL")
+    timeout = float(MAX_TURN_TIMEOUT)
 
     if requested == MockProvider.name:
         return MockProvider(
-            model=model,
             timeout=timeout,
             simulate_timeout=bool(env.get("MOCK_TIMEOUT")),
         )
 
     if requested == CodexProvider.name:
         api_key = (env.get("OPENAI_API_KEY") or "").strip()
+        model = "gpt-5.6"
         if not api_key:
             raise ConfigError("AI_PROVIDER=codex but OPENAI_API_KEY is not set")
         return CodexProvider(api_key=api_key, model=model, timeout=timeout)
