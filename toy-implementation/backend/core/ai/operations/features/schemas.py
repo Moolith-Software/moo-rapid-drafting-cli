@@ -9,7 +9,9 @@ This module owns both directions of the contract:
   parse_feature_summary() -> validating what it sends back
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from ....errors import BadOutput
 
 
 class FeatureSummary(BaseModel):
@@ -36,17 +38,17 @@ OUTPUT_SCHEMA = FeatureSummary.model_json_schema()
 
 def parse_feature_summary(reply: str) -> dict:
     """
-    Turn Codex's reply into a FeatureSummary dict.
+    Turn the AI's reply into a FeatureSummary dict.
 
     The schema constrains the reply, but it arrives as a *string* we still have
-    to parse. If that ever fails, keep the raw text as the summary rather than
-    failing a turn whose file edits already succeeded.
+    to parse. A reply that does not match means the turn did not really produce
+    what we asked for — an agent that trailed off mid-thought, or a provider that
+    does not enforce schemas — so it raises rather than passing off prose as a
+    summary.
     """
     try:
         return FeatureSummary.model_validate_json(reply).model_dump()
-    except Exception:
-        return FeatureSummary(
-            feature_title="",
-            summary=reply.strip() or "(no summary returned)",
-            highlights=[],
-        ).model_dump()
+    except ValidationError as exc:
+        raise BadOutput(f"reply did not match the schema: {reply[:120]!r}") from exc
+    except ValueError as exc:  # not JSON at all, including an empty reply
+        raise BadOutput(f"reply was not valid JSON: {reply[:120]!r}") from exc

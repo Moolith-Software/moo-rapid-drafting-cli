@@ -25,7 +25,7 @@ from .ai.operations import features as feature_ai
 
 
 def run_add(feature_id: int) -> None:
-    """Prepare an instance, have the AI implement the feature, record the result."""
+    """Prepare an instance, have the AI add the feature, record the result."""
     feature = db.get_feature(feature_id)
     try:
         db.set_status(feature_id, statuses.PREPARING, "Preparing a workspace…")
@@ -35,7 +35,7 @@ def run_add(feature_id: int) -> None:
 
         db.set_status(feature_id, statuses.RUNNING, "Implementing the feature…")
         before = changes.snapshot(instance.workspace)
-        result = feature_ai.implement(
+        result = feature_ai.add_feature(
             instance.workspace,
             feature["feature"],
             on_progress=lambda line: db.set_progress(feature_id, line),
@@ -50,10 +50,10 @@ def run_add(feature_id: int) -> None:
             summary=result.summary,
             codex_session_id=result.session_id,
         )
-        _record_outcome(feature_id, result)
+        db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
-        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).message())
+        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).status_line())
 
 
 def run_refine(feature_id: int, user_request: str) -> None:
@@ -70,7 +70,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
         recap = feature["summary"].get("summary") or feature["feature"]
 
         before = changes.snapshot(workspace)
-        result = feature_ai.refine(
+        result = feature_ai.refine_feature(
             workspace,
             recap,
             user_request,
@@ -86,10 +86,10 @@ def run_refine(feature_id: int, user_request: str) -> None:
             ),
             codex_session_id=result.session_id,
         )
-        _record_outcome(feature_id, result)
+        db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
-        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).message())
+        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).status_line())
 
 
 # --- recording -------------------------------------------------------------
@@ -108,13 +108,3 @@ def _append_refinement(
             "summary": result.summary,
         }
     ]
-
-
-def _record_outcome(feature_id: int, result) -> None:
-    """Put the feature into its final state."""
-    if result.ok:
-        db.set_status(feature_id, statuses.COMPLETED, "Done.")
-    else:
-        db.set_status(
-            feature_id, statuses.FAILED, errors.ProviderFailed(result.error).message()
-        )

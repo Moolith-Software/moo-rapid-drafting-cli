@@ -19,18 +19,19 @@ from ...errors import TurnTimeout
 from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 
+NOTE_FILE = "MOCK_CHANGE.md"  # what the mock writes, so the diff has something real
+
+
 class MockProvider(Provider):
     name = "mock"
 
     def __init__(
         self,
         timeout: float = MAX_TURN_TIMEOUT,
-        note_file: str = "MOCK_CHANGE.md",
         simulate_timeout: bool = False,
     ):
         # No model: there is no real one to pick, so it stays None on the base.
         super().__init__(timeout=timeout)
-        self.note_file = note_file
         self.simulate_timeout = simulate_timeout
 
     def run_turn(
@@ -46,13 +47,13 @@ class MockProvider(Provider):
 
         if self.simulate_timeout:
             time.sleep(1)
-            raise TurnTimeout(f"no result after {self.timeout:.0f}s")
+            raise TurnTimeout(f"no result after {self.timeout / 60:.0f} minutes")
 
         # Reuse whichever session we were given so resume/fork behave believably.
         session = session_id or fork_from or f"mock-{uuid.uuid4().hex[:8]}"
 
         # A real edit, so snapshot/diff sees an actual change.
-        note = Path(workspace) / self.note_file
+        note = Path(workspace) / NOTE_FILE
         previous = note.read_text() if note.exists() else ""
         note.write_text(f"{previous}- {prompt.splitlines()[-1][:80]}\n")
 

@@ -11,7 +11,7 @@ the one it wants instead of the whole process sharing a single choice.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -23,7 +23,6 @@ class TurnOutcome:
     ok: bool
     text: str  # the model's final response, unparsed
     session_id: str  # store this to resume or fork later
-    usage: dict = field(default_factory=dict)
     error: str | None = None
 
 
