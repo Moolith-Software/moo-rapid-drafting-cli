@@ -79,7 +79,7 @@ def initialize(body: InitializeBody) -> dict:
     return db.create_feature(body.feature.strip(), code_folder_name="pending", parent_id=body.parent_id)
 
 
-@app.post("/features/add")
+@app.post("/features/add", status_code=202)
 def add(body: IdBody, background: BackgroundTasks) -> dict:
     """Kick off the Codex run for a feature in the background."""
     feature = db.get_feature(body.id)
@@ -89,7 +89,7 @@ def add(body: IdBody, background: BackgroundTasks) -> dict:
     return {"id": body.id, "status": "queued"}
 
 
-@app.post("/features/refine")
+@app.post("/features/refine", status_code=202)
 def refine(body: RefineBody, background: BackgroundTasks) -> dict:
     """Kick off a Codex refinement for a feature in the background."""
     feature = db.get_feature(body.id)

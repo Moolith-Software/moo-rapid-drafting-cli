@@ -26,8 +26,15 @@ from .ai.operations import features as feature_ai
 
 def run_add(feature_id: int) -> None:
     """Prepare an instance, have the AI add the feature, record the result."""
-    feature = db.get_feature(feature_id)
     try:
+        feature = db.get_feature(feature_id)
+        if not feature:  # feature_id should always be valid
+            print(
+                f"[pipeline] feature {feature_id} not found — "
+                "cannot write status or message to the db",
+                flush=True,
+            )
+            return
         db.set_status(feature_id, statuses.PREPARING, "Preparing a workspace…")
         parent = db.get_feature(feature["parent_id"]) if feature["parent_id"] else None
         instance = instances.prepare(feature_id, parent)
@@ -63,8 +70,17 @@ def run_refine(feature_id: int, user_request: str) -> None:
     Resumes the feature's own session, so the AI continues from its real history
     rather than being re-briefed, and edits the same workspace in place.
     """
-    feature = db.get_feature(feature_id)
     try:
+        feature = db.get_feature(feature_id)
+        if not feature:
+            # Nothing to report against: a status write targets this row, so with
+            # no row there is nowhere to record the failure. Log and stop.
+            print(
+                f"[pipeline] feature {feature_id} not found — "
+                "cannot write status or message to the db",
+                flush=True,
+            )
+            return
         db.set_status(feature_id, statuses.RUNNING, "Refining the feature…")
         workspace = workspaces.path_for(feature["code_folder_name"])
         recap = feature["summary"].get("summary") or feature["feature"]
