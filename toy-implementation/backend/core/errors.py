@@ -7,10 +7,14 @@ which reply. Callers catch AppError, store `status_line()` on the feature, and
 never have to stringify a raw exception.
 
     1xxx  workspace  — preparing a copy of the code
-    2xxx  the AI     — configuring it, running it, waiting for it
-    3xxx  output     — it replied, but not in the shape we asked for
+    2xxx  AI integration     — configuring it, running it, waiting for it, and output issues
     9xxx  unknown    — anything we did not anticipate
+
+General title and error code, with granular information inside the message, passed from the
+provider.  Every AI provider must map/flatten its exceptions to these error codes.
 """
+
+import traceback
 
 
 class AppError(Exception):
@@ -29,7 +33,12 @@ class AppError(Exception):
         self.message = message
 
     def status_line(self) -> str:
-        """One line for the feature's status: '[2000] AI not configured: ...'."""
+        """
+        One line for the feature's status:
+
+            [2003] [codex_sdk] [gpt-5.6] AI credentials rejected: 401 invalid_api_key
+            [1000] Workspace already exists: /tmp/ws
+        """
         suffix = f": {self.message}" if self.message else ""
         return f"[{self.code}] {self.title}{suffix}"
 
@@ -44,28 +53,61 @@ class CopyUnavailable(AppError):
     title = "Copy-on-write unavailable"
 
 
-class ConfigError(AppError):  # unknown provider, or a missing key
+class ConfigError(AppError):
     code = 2000
     title = "AI not configured"
 
 
-class ProviderFailed(AppError):  # ran, but did not finish cleanly
+class TurnFailed(AppError):
     code = 2001
-    title = "AI provider failed"
+    title = "AI run failed"
 
 
-class TurnTimeout(AppError):
+class TurnTimeout(
+    AppError
+):  # message says whether it was our watchdog or within provider
     code = 2002
     title = "AI timed out"
 
 
-class BadOutput(AppError):  # reply did not match the schema we asked for
-    code = 3000
+class AuthRejected(AppError):
+    code = 2003
+    title = "AI credentials rejected"
+
+
+class QuotaExceeded(AppError):
+    code = 2004
+    title = "AI usage limit reached"
+
+
+class BadOutput(AppError):
+    code = 2005
     title = "Unusable AI response"
 
 
+class NoChanges(AppError):
+    code = 2006
+    title = "AI made no changes"
+
+
+class UnknownAIError(AppError):  # last in the band, the way 9000 is last overall
+    code = 2999
+    title = "Unexpected AI error"
+
+
 def wrap(exc: Exception) -> AppError:
-    """Turn any exception into an AppError so callers handle only one type."""
-    if isinstance(exc, AppError):
-        return exc
-    return AppError(f"{type(exc).__name__}: {exc}")
+    """
+    Turn any exception into an AppError so callers handle only one type.
+
+    As a central point for all feature related exceptions  - prints to console here
+    for observability.
+    """
+    error = (
+        exc if isinstance(exc, AppError) else AppError(f"{type(exc).__name__}: {exc}")
+    )
+
+    # Assemble and include complete traceback for future investigation
+    detail = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    print(f"[error] {error.status_line()}\n{detail}", flush=True)
+
+    return error

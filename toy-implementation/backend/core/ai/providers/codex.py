@@ -26,10 +26,27 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from openai_codex import Codex, CodexConfig, InvalidRequestError, Sandbox
+from openai_codex import (
+    Codex,
+    CodexConfig,
+    InvalidRequestError,
+    Sandbox,
+    ServerBusyError,
+    TransportClosedError,
+)
 from openai_codex.types import TurnStatus
+from pydantic import ValidationError
 
-from ...errors import TurnTimeout
+from ...errors import (
+    AppError,
+    AuthRejected,
+    ConfigError,
+    QuotaExceeded,
+    TurnFailed,
+    TurnTimeout,
+    UnknownAIError,
+)
+from ...utils import mentions, readable_duration
 from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 # Default location, at the backend root rather than beside this file — stored
@@ -41,13 +58,50 @@ CODEX_HOME = Path(__file__).resolve().parents[3] / ".codex_home"
 REASONING_EFFORT = "medium"  # none | low | medium | high | xhigh
 
 
-def _readable(seconds: float) -> str:
-    """Time limits are set in seconds; say them the way a person reads them."""
-    return f"{seconds / 60:.0f} minutes" if seconds >= 60 else f"{seconds:.0f}s"
+def _classify(exc: Exception) -> AppError:
+    """
+    Work out which failure a failed turn was, from its message since RuntimeError
+    is all that it throws, ordered by precedence.
+    """
+    message = str(exc)
+
+    if mentions(message, "invalid_json_schema", "codex_output_schema"):
+        return ConfigError(f"codex rejected our output schema: {message}")
+
+    if mentions(message, "invalid_api_key", "unauthorized"):
+        return AuthRejected(message)
+
+    if mentions(message, "usage limit", "quota", "rate limit"):
+        return QuotaExceeded(message)
+
+    # unclassified turn failure
+    return TurnFailed(message)
+
+
+def _translate(exc: Exception) -> AppError:
+    """
+    Turn anything the SDK throws into one of our codes, ordered by precedence.
+
+    A turn can die for perfectly ordinary reasons - the provider was
+    busy, the subprocess went away - and that is still considered a failed run
+
+    The last case is deliberately open: anything unrecognised, a bug of our own
+    included, is named here rather than left to escape as an unexpected error.
+    """
+    if isinstance(exc, RuntimeError):  # run time errors matched against keywords
+        return _classify(exc)
+
+    if isinstance(exc, (ServerBusyError, TransportClosedError)):
+        return TurnFailed(f"{type(exc).__name__}: {exc}")
+
+    if isinstance(exc, ValidationError):
+        return UnknownAIError(f"unexpected response shape: {exc}")
+
+    return UnknownAIError(f"{type(exc).__name__}: {exc}")
 
 
 class CodexProvider(Provider):
-    name = "codex"
+    name = "codex_sdk"
 
     def __init__(
         self,
@@ -67,35 +121,34 @@ class CodexProvider(Provider):
         session_id: str | None = None,
         fork_from: str | None = None,
     ) -> TurnOutcome:
-        with self._connect() as codex:
-            thread = self._open_thread(codex, workspace, session_id, fork_from)
-            handle = thread.turn(
-                prompt,
-                output_schema=output_schema,
-                model=self.model,
-                effort=REASONING_EFFORT,
-            )
-            result = self._wait_for_result(handle)
+        try:
+            with self._connect() as codex:
+                thread = self._open_thread(codex, workspace, session_id, fork_from)
+                handle = thread.turn(
+                    prompt,
+                    output_schema=output_schema,
+                    model=self.model,
+                    effort=REASONING_EFFORT,
+                )
+                result = self._wait_for_result(handle)
+        except AppError as exc:
+            raise self.tag(exc)
+        except Exception as exc:
+            raise self.tag(_translate(exc)) from exc
 
         if result.usage:  # logged for cost/cache visibility; nothing stores it
-            print(f"[codex] {thread.id} usage: {result.usage.model_dump()}", flush=True)
+            print(
+                f"{self.tags} {thread.id} usage: {result.usage.model_dump()}",
+                flush=True,
+            )
 
-        # A turn can end without an error and still not be finished: `interrupted`
-        # is what our own watchdog produces, and what a half-answered turn looks
-        # like. Only `completed` counts as success.
-        finished = result.status == TurnStatus.completed
-        return TurnOutcome(
-            ok=finished and result.error is None,
-            text=result.final_response or "",
-            session_id=thread.id,
-            error=(
-                str(result.error)
-                if result.error
-                else None
-                if finished
-                else f"turn ended as {result.status.value}"
-            ),
-        )
+        # edge case in case result was interrupted, don't want a false positive success
+        if result.status != TurnStatus.completed:
+            raise self.tag(
+                TurnFailed(f"turn ended as {result.status.value} (external)")
+            )
+
+        return TurnOutcome(text=result.final_response or "", session_id=thread.id)
 
     def _wait_for_result(self, handle):
         """
@@ -106,7 +159,6 @@ class CodexProvider(Provider):
         So a watchdog timer calls the SDK's own `interrupt()`, which is the
         supported way to stop an active turn.
         """
-        limit = _readable(self.timeout)
         expired = threading.Event()
 
         def stop() -> None:
@@ -119,13 +171,17 @@ class CodexProvider(Provider):
             result = handle.run()
         except Exception:
             if expired.is_set():
-                raise TurnTimeout(f"no result after {limit}") from None
+                raise TurnTimeout(
+                    f"no result after {readable_duration(self.timeout)} (watchdog)"
+                ) from None
             raise
         finally:
             watchdog.cancel()
 
         if expired.is_set():  # interrupted cleanly rather than by raising
-            raise TurnTimeout(f"no result after {limit}")
+            raise TurnTimeout(
+                f"no result after {readable_duration(self.timeout)} (watchdog)"
+            )
         return result
 
     def _connect(self) -> Codex:
@@ -136,8 +192,29 @@ class CodexProvider(Provider):
         child process, and keeping one alive between turns would leak it.
         """
         CODEX_HOME.mkdir(parents=True, exist_ok=True)
-        codex = Codex(CodexConfig(env={**os.environ, "CODEX_HOME": str(CODEX_HOME)}))
-        codex.login_api_key(self.api_key)
+        try:
+            codex = Codex(
+                CodexConfig(env={**os.environ, "CODEX_HOME": str(CODEX_HOME)})
+            )
+        except (FileNotFoundError, PermissionError) as exc:
+            raise ConfigError(f"codex runtime unavailable: {exc}") from exc
+        except OSError as exc:  # anything else that stopped the subprocess starting
+            raise ConfigError(f"could not start codex: {exc}") from exc
+        except Exception as exc:
+            raise ConfigError(
+                f"codex runtime handshake failed: {type(exc).__name__}: {exc}"
+            ) from exc
+
+        try:
+            codex.login_api_key(self.api_key)
+        except Exception as exc:
+            codex.close()
+            raise ConfigError(
+                f"codex login failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        except BaseException:
+            codex.close()
+            raise
         return codex
 
     def _open_thread(
@@ -162,7 +239,7 @@ class CodexProvider(Provider):
                 return codex.thread_resume(session_id, **options)
         except InvalidRequestError:
             print(
-                f"[codex] session {session_id or fork_from} not found — starting fresh",
+                f"{self.tags} session {session_id or fork_from} not found — starting fresh",
                 flush=True,
             )
         return codex.thread_start(**options)

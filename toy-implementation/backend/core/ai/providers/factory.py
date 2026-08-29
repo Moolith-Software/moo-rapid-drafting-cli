@@ -22,7 +22,7 @@ def create_provider(env: Mapping[str, str] | None = None) -> Provider:
     Build the configured provider, defaults to codex.
     """
     env = os.environ if env is None else env
-    requested = (env.get("AI_PROVIDER") or "codex").strip().lower()
+    requested = (env.get("AI_PROVIDER") or CodexProvider.name).strip().lower()
 
     # Config every provider takes, applied the same way to each.
     timeout = float(MAX_TURN_TIMEOUT)
@@ -37,7 +37,9 @@ def create_provider(env: Mapping[str, str] | None = None) -> Provider:
         api_key = (env.get("OPENAI_API_KEY") or "").strip()
         model = "gpt-5.6"
         if not api_key:
-            raise ConfigError("AI_PROVIDER=codex but OPENAI_API_KEY is not set")
+            raise ConfigError(
+                f"AI_PROVIDER={CodexProvider.name} but OPENAI_API_KEY is not set"
+            )
         return CodexProvider(api_key=api_key, model=model, timeout=timeout)
 
     raise ConfigError(f"unknown AI_PROVIDER {requested!r}")

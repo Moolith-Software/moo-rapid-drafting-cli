@@ -50,13 +50,18 @@ def run_add(feature_id: int) -> None:
             fork_from=instance.fork_from,
         )
         after = changes.snapshot(instance.workspace)
+        file_changes = changes.diff_snapshots(before, after)
 
         db.update_feature(
             feature_id,
-            file_changes=changes.diff_snapshots(before, after),
+            file_changes=file_changes,
             summary=result.summary,
             codex_session_id=result.session_id,
         )
+        # Recorded before it is judged, so a run that changed nothing still
+        # leaves the AI's own account of the run behind to read.
+        if not file_changes:
+            raise errors.NoChanges("the AI reported success but no files changed")
         db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
@@ -94,14 +99,17 @@ def run_refine(feature_id: int, user_request: str) -> None:
             session_id=feature["codex_session_id"],
         )
         after = changes.snapshot(workspace)
+        file_changes = changes.diff_snapshots(before, after)
 
         db.update_feature(
             feature_id,
             refinements=_append_refinement(
-                feature, user_request, changes.diff_snapshots(before, after), result
+                feature, user_request, file_changes, result
             ),
             codex_session_id=result.session_id,
         )
+        if not file_changes:
+            raise errors.NoChanges("the refinement reported success but no files changed")
         db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:

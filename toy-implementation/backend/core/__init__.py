@@ -6,6 +6,8 @@ The core of the tool — everything that actually builds a feature.
     workspace_manager.py  per-feature copy-on-write clones of the app
     changes.py            what changed on disk, computed deterministically
     statuses.py           the states a feature moves through
+    errors.py             every failure we report, and its code
+    utils.py              small pure helpers shared across the above
     ai/                   what we ask the AI for, and who answers
 
 Deliberately free of HTTP concerns; main.py wires these to endpoints, and db.py

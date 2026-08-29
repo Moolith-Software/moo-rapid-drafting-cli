@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from ...errors import TurnTimeout
+from ...utils import readable_duration
 from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 
@@ -47,7 +48,9 @@ class MockProvider(Provider):
 
         if self.simulate_timeout:
             time.sleep(1)
-            raise TurnTimeout(f"no result after {self.timeout / 60:.0f} minutes")
+            raise self.tag(
+                TurnTimeout(f"no result after {readable_duration(self.timeout)} (mock)")
+            )
 
         # Reuse whichever session we were given so resume/fork behave believably.
         session = session_id or fork_from or f"mock-{uuid.uuid4().hex[:8]}"
@@ -57,9 +60,7 @@ class MockProvider(Provider):
         previous = note.read_text() if note.exists() else ""
         note.write_text(f"{previous}- {prompt.splitlines()[-1][:80]}\n")
 
-        return TurnOutcome(
-            ok=True, text=self._placeholder(output_schema), session_id=session
-        )
+        return TurnOutcome(text=self._placeholder(output_schema), session_id=session)
 
     def _placeholder(self, schema: dict) -> str:
         """

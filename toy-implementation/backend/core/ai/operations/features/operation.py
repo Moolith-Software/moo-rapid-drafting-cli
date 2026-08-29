@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from ....errors import ProviderFailed
+from ....errors import AppError
 from ... import providers
 from . import prompts, schemas
 
@@ -64,9 +64,14 @@ def _run(
         session_id=session_id,
         fork_from=fork_from,
     )
-    if not outcome.ok:
-        raise ProviderFailed(outcome.error or "the turn did not finish")
-
-    # Raises BadOutput if the reply is not the shape we asked for.
-    summary = schemas.parse_feature_summary(outcome.text)
+    # A turn that did not finish has already raised, so reaching here means the
+    # provider has something to show for it.
+    #
+    # Raises BadOutput if the reply is not the shape we asked for. Tagged here
+    # because the provider has already handed back by this point, and an
+    # unusable reply is still that provider's reply.
+    try:
+        summary = schemas.parse_feature_summary(outcome.text)
+    except AppError as exc:
+        raise provider.tag(exc)
     return FeatureResult(summary=summary, session_id=outcome.session_id)

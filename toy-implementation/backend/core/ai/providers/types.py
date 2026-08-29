@@ -15,15 +15,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from ...errors import AppError
+
 
 @dataclass
 class TurnOutcome:
-    """The raw result of one turn."""
+    """
+    The raw result of one turn that finished.
+    """
 
-    ok: bool
     text: str  # the model's final response, unparsed
     session_id: str  # store this to resume or fork later
-    error: str | None = None
 
 
 # How long a single turn may run before it is interrupted. A backstop for a hung
@@ -34,7 +36,7 @@ MAX_TURN_TIMEOUT = 20 * 60
 class Provider(ABC):
     """The one thing every provider does."""
 
-    name: str  # how the factory refers to it, e.g. "codex"
+    name: str  # how the factory refers to it, e.g. "codex_sdk"
 
     def __init__(
         self,
@@ -43,6 +45,27 @@ class Provider(ABC):
     ):
         self.model = model  # None means the provider's own default
         self.timeout = timeout  # seconds a single turn may run
+
+    @property
+    def tags(self) -> str:
+        """How this provider names itself, in an error title or a log line."""
+        return " ".join(f"[{part}]" for part in (self.name, self.model) if part)
+
+    def tag(self, error: AppError) -> AppError:
+        """
+        Record which provider and model an AI error came from.  Applicable to 2000 error codes
+
+        The tags go on the front of `title` rather than into `message`
+
+        Public because the operation layer tags too: an unusable reply is
+        raised after the turn returns, by which point the provider is no longer
+        the one holding the error.
+        """
+        if not 2000 <= error.code < 3000:
+            return error
+
+        error.title = f"{self.tags} {error.title}"
+        return error
 
     @abstractmethod
     def run_turn(
