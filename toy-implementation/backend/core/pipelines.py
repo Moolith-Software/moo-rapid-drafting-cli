@@ -99,10 +99,10 @@ def run_refine(feature_id: int, user_request: str) -> None:
                 flush=True,
             )
             return
-        db.set_status(feature_id, statuses.REFINING, "Refining the feature…")
         workspace = workspaces.path_for(feature["code_folder_name"])
         recap = _recap(feature)
 
+        db.set_status(feature_id, statuses.REFINING, "Refining the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.refine_feature(
             workspace,
