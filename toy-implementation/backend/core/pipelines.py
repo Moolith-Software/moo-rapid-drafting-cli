@@ -35,6 +35,11 @@ def run_add(feature_id: int) -> None:
                 flush=True,
             )
             return
+        if feature["status"] != statuses.READY or feature["is_dirty"]:
+            raise errors.InvalidFeature(
+                f"cannot use this feature row: status is {feature['status']!r}, "
+                f"is_dirty={feature['is_dirty']}"
+            )
         db.set_status(feature_id, statuses.PREPARING, "Preparing a workspace…")
         parent = db.get_feature(feature["parent_id"]) if feature["parent_id"] else None
         instance = instances.prepare(feature_id, parent)
@@ -99,6 +104,11 @@ def run_refine(feature_id: int, user_request: str) -> None:
                 flush=True,
             )
             return
+        if feature["status"] != statuses.COMPLETED:
+            raise errors.InvalidFeature(
+                f"cannot refine this feature row: status is {feature['status']!r}, "
+                f"expected {statuses.COMPLETED!r}"
+            )
         workspace = workspaces.path_for(feature["code_folder_name"])
         recap = _recap(feature)
 

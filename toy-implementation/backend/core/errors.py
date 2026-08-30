@@ -6,7 +6,7 @@ short `title`, plus a `message` from the raise site saying which path, which id,
 which reply. Callers catch AppError, store `status_line()` on the feature, and
 never have to stringify a raw exception.
 
-    1xxx  workspace  — preparing a copy of the code
+    1xxx  workspace + setup      — the feature and its workspace
     2xxx  AI integration     — configuring it, running it, waiting for it, and output issues
     9xxx  unknown    — anything we did not anticipate
 
@@ -51,6 +51,11 @@ class WorkspaceExists(AppError):
 class CopyUnavailable(AppError):
     code = 1001
     title = "Copy-on-write unavailable"
+
+
+class InvalidFeature(AppError):  # asked to do something its state does not allow
+    code = 1002
+    title = "Invalid feature state"
 
 
 class ConfigError(AppError):
