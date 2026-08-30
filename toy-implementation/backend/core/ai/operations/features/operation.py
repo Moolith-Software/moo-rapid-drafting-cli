@@ -4,6 +4,7 @@ Have an AI build or refine a feature by editing a workspace.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from ....errors import AppError
 from ... import providers
@@ -25,7 +26,14 @@ def add_feature(
     fork_from: str | None = None,
 ) -> FeatureResult:
     """Build a feature that has not been started yet."""
-    return _run(workspace, prompts.add(user_request), session_id, fork_from)
+    return _run(
+        workspace,
+        prompts.add(user_request),
+        schemas.FEATURE_SCHEMA,
+        schemas.parse_feature_summary,
+        session_id,
+        fork_from,
+    )
 
 
 def refine_feature(
@@ -38,6 +46,8 @@ def refine_feature(
     return _run(
         workspace,
         prompts.refine(recap, user_request),
+        schemas.REFINEMENT_SCHEMA,
+        schemas.parse_refinement_summary,
         session_id,
         None,
     )
@@ -46,6 +56,8 @@ def refine_feature(
 def _run(
     workspace: Path,
     prompt: str,
+    output_schema: dict,
+    parse: Callable[[str], dict],
     session_id: str | None,
     fork_from: str | None,
 ) -> FeatureResult:
@@ -53,18 +65,16 @@ def _run(
     outcome = provider.run_turn(
         workspace,
         prompt,
-        schemas.OUTPUT_SCHEMA,
+        output_schema,
         session_id=session_id,
         fork_from=fork_from,
     )
     # A turn that did not finish has already raised, so reaching here means the
     # provider has something to show for it.
     #
-    # Raises BadOutput if the reply is not the shape we asked for. Tagged here
-    # because the provider has already handed back by this point, and an
-    # unusable reply is still that provider's reply.
+    # Raises BadOutput if the reply is not the shape we asked for
     try:
-        summary = schemas.parse_feature_summary(outcome.text)
+        summary = parse(outcome.text)
     except AppError as exc:
         raise provider.tag(exc)
     return FeatureResult(summary=summary, session_id=outcome.session_id)

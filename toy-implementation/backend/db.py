@@ -119,11 +119,6 @@ def set_status(feature_id: int, status: str, progress: str) -> None:
     update_feature(feature_id, status=status, progress=progress)
 
 
-def set_progress(feature_id: int, progress: str) -> None:
-    """Record a live progress line without changing the status."""
-    update_feature(feature_id, progress=progress)
-
-
 def update_feature(feature_id: int, **fields) -> None:
     """
     Patch arbitrary columns on a feature. JSON columns are encoded automatically,

@@ -87,7 +87,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
             return
         db.set_status(feature_id, statuses.RUNNING, "Refining the feature…")
         workspace = workspaces.path_for(feature["code_folder_name"])
-        recap = feature["summary"].get("summary") or feature["feature"]
+        recap = _recap(feature)
 
         before = changes.snapshot(workspace)
         result = feature_ai.refine_feature(
@@ -101,13 +101,13 @@ def run_refine(feature_id: int, user_request: str) -> None:
 
         db.update_feature(
             feature_id,
-            refinements=_append_refinement(
-                feature, user_request, file_changes, result
-            ),
+            refinements=_append_refinement(feature, user_request, file_changes, result),
             codex_session_id=result.session_id,
         )
         if not file_changes:
-            raise errors.NoChanges("the refinement reported success but no files changed")
+            raise errors.NoChanges(
+                "the refinement reported success but no files changed"
+            )
         db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
@@ -115,6 +115,19 @@ def run_refine(feature_id: int, user_request: str) -> None:
 
 
 # --- recording -------------------------------------------------------------
+
+
+def _recap(feature: dict) -> str:
+    """
+    What the feature does so far — the first turn, then each refinement in order.
+    Only place we have this is history is here, otherwise model wouldn't see these changes.
+    """
+    story = [feature["summary"].get("summary") or feature["feature"]]
+    for refinement in feature["refinements"]:
+        summary = refinement.get("summary")
+        if isinstance(summary, dict) and summary.get("summary"):
+            story.append(summary["summary"])
+    return " ".join(story)
 
 
 def _append_refinement(
