@@ -42,6 +42,7 @@ def init_db() -> None:
             status         TEXT NOT NULL DEFAULT 'initialized',
             progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
             codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
+            is_dirty       INTEGER NOT NULL DEFAULT 0,    -- the workspace has been edited; never goes back to 0
             created_at     REAL NOT NULL
         )
         """
@@ -52,6 +53,11 @@ def init_db() -> None:
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(features)")}
     if "codex_session_id" not in existing:
         conn.execute("ALTER TABLE features ADD COLUMN codex_session_id TEXT")
+        conn.commit()
+    if "is_dirty" not in existing:
+        conn.execute(
+            "ALTER TABLE features ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"
+        )
         conn.commit()
     conn.close()
 
@@ -81,6 +87,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     data["file_changes"] = json.loads(data["file_changes"])
     data["refinements"] = json.loads(data["refinements"])
     data["summary"] = _normalize_summary(data["summary"])
+    data["is_dirty"] = bool(data["is_dirty"])
     return data
 
 

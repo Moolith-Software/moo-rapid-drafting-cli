@@ -38,32 +38,41 @@ def run_add(feature_id: int) -> None:
         db.set_status(feature_id, statuses.PREPARING, "Preparing a workspace…")
         parent = db.get_feature(feature["parent_id"]) if feature["parent_id"] else None
         instance = instances.prepare(feature_id, parent)
+        workspace = instance.workspace
         db.update_feature(feature_id, code_folder_name=instance.folder)
 
         db.set_status(feature_id, statuses.RUNNING, "Implementing the feature…")
-        before = changes.snapshot(instance.workspace)
+        before = changes.snapshot(workspace)
         result = feature_ai.add_feature(
-            instance.workspace,
+            workspace,
             feature["feature"],
             session_id=instance.session_id,
             fork_from=instance.fork_from,
         )
-        after = changes.snapshot(instance.workspace)
+        after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
+
+        # Deterministically check if any file actually changed, which is always expected
+        if not file_changes:
+            raise errors.NoChanges(
+                "the AI reported success for adding the feature  but no files changed"
+            )
 
         db.update_feature(
             feature_id,
             file_changes=file_changes,
             summary=result.summary,
             codex_session_id=result.session_id,
+            is_dirty=True,
         )
-        # Recorded before it is judged, so a run that changed nothing still
-        # leaves the AI's own account of the run behind to read.
-        if not file_changes:
-            raise errors.NoChanges("the AI reported success but no files changed")
         db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
+        try:
+            edited = bool(changes.diff_snapshots(before, changes.snapshot(workspace)))
+        except Exception:
+            edited = False
+        db.update_feature(feature_id, is_dirty=edited)
         db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).status_line())
 
 
@@ -99,18 +108,25 @@ def run_refine(feature_id: int, user_request: str) -> None:
         after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
 
-        db.update_feature(
-            feature_id,
-            refinements=_append_refinement(feature, user_request, file_changes, result),
-            codex_session_id=result.session_id,
-        )
         if not file_changes:
             raise errors.NoChanges(
                 "the refinement reported success but no files changed"
             )
+
+        db.update_feature(
+            feature_id,
+            refinements=_append_refinement(feature, user_request, file_changes, result),
+            codex_session_id=result.session_id,
+            is_dirty=True,
+        )
         db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
+        try:  # unbound if it failed before there was a workspace to snapshot
+            edited = bool(changes.diff_snapshots(before, changes.snapshot(workspace)))
+        except Exception:
+            edited = False
+        db.update_feature(feature_id, is_dirty=edited)
         db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).status_line())
 
 
