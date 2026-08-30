@@ -64,16 +64,21 @@ def run_add(feature_id: int) -> None:
             summary=result.summary,
             codex_session_id=result.session_id,
             is_dirty=True,
+            status=statuses.COMPLETED,
+            progress="Done.",
         )
-        db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
         try:
             edited = bool(changes.diff_snapshots(before, changes.snapshot(workspace)))
         except Exception:
             edited = False
-        db.update_feature(feature_id, is_dirty=edited)
-        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).status_line())
+        db.update_feature(
+            feature_id,
+            is_dirty=edited,
+            status=statuses.FAILED,
+            progress=errors.wrap(exc).status_line(),
+        )
 
 
 def run_refine(feature_id: int, user_request: str) -> None:
@@ -118,16 +123,21 @@ def run_refine(feature_id: int, user_request: str) -> None:
             refinements=_append_refinement(feature, user_request, file_changes, result),
             codex_session_id=result.session_id,
             is_dirty=True,
+            status=statuses.COMPLETED,
+            progress="Done.",
         )
-        db.set_status(feature_id, statuses.COMPLETED, "Done.")
 
     except Exception as exc:
         try:  # unbound if it failed before there was a workspace to snapshot
             edited = bool(changes.diff_snapshots(before, changes.snapshot(workspace)))
         except Exception:
             edited = False
-        db.update_feature(feature_id, is_dirty=edited)
-        db.set_status(feature_id, statuses.FAILED, errors.wrap(exc).status_line())
+        db.update_feature(
+            feature_id,
+            is_dirty=edited,
+            status=statuses.FAILED,
+            progress=errors.wrap(exc).status_line(),
+        )
 
 
 # --- recording -------------------------------------------------------------
