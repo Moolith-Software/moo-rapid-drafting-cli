@@ -55,7 +55,7 @@ def run_add(feature_id: int) -> None:
         # Deterministically check if any file actually changed, which is always expected
         if not file_changes:
             raise errors.NoChanges(
-                "the AI reported success for adding the feature  but no files changed"
+                "the AI reported success for adding the feature, but no files changed"
             )
 
         db.update_feature(
@@ -99,7 +99,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
                 flush=True,
             )
             return
-        db.set_status(feature_id, statuses.RUNNING, "Refining the feature…")
+        db.set_status(feature_id, statuses.REFINING, "Refining the feature…")
         workspace = workspaces.path_for(feature["code_folder_name"])
         recap = _recap(feature)
 
@@ -115,7 +115,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
 
         if not file_changes:
             raise errors.NoChanges(
-                "the refinement reported success but no files changed"
+                "the refinement AI reported success but no files changed"
             )
 
         db.update_feature(
@@ -128,13 +128,9 @@ def run_refine(feature_id: int, user_request: str) -> None:
         )
 
     except Exception as exc:
-        try:  # unbound if it failed before there was a workspace to snapshot
-            edited = bool(changes.diff_snapshots(before, changes.snapshot(workspace)))
-        except Exception:
-            edited = False
         db.update_feature(
             feature_id,
-            is_dirty=edited,
+            is_dirty=True,  # assumed to be dirty since it uses the same workspace as run_add
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )

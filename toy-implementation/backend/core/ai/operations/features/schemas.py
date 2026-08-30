@@ -75,9 +75,12 @@ def _parse(model: type[BaseModel], reply: str) -> dict:
     does not enforce schemas — so it raises rather than passing off prose as a
     summary.
     """
+    if not reply.strip():
+        raise BadOutput("the AI returned an empty reply")
+
     try:
         return model.model_validate_json(reply).model_dump()
     except ValidationError as exc:
+        if any(error["type"] == "json_invalid" for error in exc.errors()):
+            raise BadOutput(f"reply was not valid JSON: {reply[:120]!r}") from exc
         raise BadOutput(f"reply did not match the schema: {reply[:120]!r}") from exc
-    except ValueError as exc:  # not JSON at all, including an empty reply
-        raise BadOutput(f"reply was not valid JSON: {reply[:120]!r}") from exc
