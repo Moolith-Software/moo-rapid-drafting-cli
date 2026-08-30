@@ -41,7 +41,7 @@ Do NOT:
 
 Do:
 - directly edit the existing files on disk
-- implement visual/functional plausibility
+- implement visual/functional plausibly
 - reuse what already exists
 - make pragmatic prototype-only decisions
 - prioritize getting a working result quickly
@@ -60,9 +60,9 @@ Your final response should contain only a concise human-readable summary of what
 SYSTEM_PROMPT = SYSTEM_PROMPTS["1.0"]
 
 
-def add(feature: str) -> str:
+def add(user_request: str) -> str:
     """First turn on a feature: implement the request."""
-    return f"{SYSTEM_PROMPT}\nUser Feature request:\n{feature}"
+    return f"{SYSTEM_PROMPT}\nUser Feature request:\n{user_request}"
 
 
 def refine(recap: str, user_request: str) -> str:

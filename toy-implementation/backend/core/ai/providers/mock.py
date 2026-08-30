@@ -13,7 +13,6 @@ import json
 import time
 import uuid
 from pathlib import Path
-from typing import Callable
 
 from ...errors import TurnTimeout
 from ...utils import readable_duration
@@ -40,12 +39,9 @@ class MockProvider(Provider):
         workspace: Path,
         prompt: str,
         output_schema: dict,
-        on_progress: Callable[[str], None],
         session_id: str | None = None,
         fork_from: str | None = None,
     ) -> TurnOutcome:
-        on_progress("Mock provider is working…")
-
         if self.simulate_timeout:
             time.sleep(1)
             raise self.tag(

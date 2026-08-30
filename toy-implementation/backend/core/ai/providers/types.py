@@ -13,7 +13,6 @@ the one it wants instead of the whole process sharing a single choice.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from ...errors import AppError
 
@@ -73,7 +72,6 @@ class Provider(ABC):
         workspace: Path,
         prompt: str,
         output_schema: dict,
-        on_progress: Callable[[str], None],
         session_id: str | None = None,
         fork_from: str | None = None,
     ) -> TurnOutcome:

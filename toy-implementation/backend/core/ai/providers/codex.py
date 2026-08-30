@@ -24,7 +24,6 @@ at, which makes it durable state rather than a cache.
 import os
 import threading
 from pathlib import Path
-from typing import Callable
 
 from openai_codex import (
     Codex,
@@ -117,7 +116,6 @@ class CodexProvider(Provider):
         workspace: Path,
         prompt: str,
         output_schema: dict,
-        on_progress: Callable[[str], None],
         session_id: str | None = None,
         fork_from: str | None = None,
     ) -> TurnOutcome:

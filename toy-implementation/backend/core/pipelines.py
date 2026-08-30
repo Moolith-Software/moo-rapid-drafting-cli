@@ -45,7 +45,6 @@ def run_add(feature_id: int) -> None:
         result = feature_ai.add_feature(
             instance.workspace,
             feature["feature"],
-            on_progress=lambda line: db.set_progress(feature_id, line),
             session_id=instance.session_id,
             fork_from=instance.fork_from,
         )
@@ -95,7 +94,6 @@ def run_refine(feature_id: int, user_request: str) -> None:
             workspace,
             recap,
             user_request,
-            on_progress=lambda line: db.set_progress(feature_id, line),
             session_id=feature["codex_session_id"],
         )
         after = changes.snapshot(workspace)

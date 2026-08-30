@@ -9,10 +9,12 @@ retyped. Deliberately dependency-free.
 """
 
 INITIALIZED = "initialized"  # row created, nothing done yet
-PREPARING = "preparing"  # cloning the code, readying a provider session
+PREPARING = "preparing"
+READY = "ready"  # workspace is ready
 RUNNING = "running"  # the AI agent is working
-COMPLETED = "completed"  # finished successfully
-FAILED = "failed"  # gave up; the reason is in `progress`
+REFINING = "refining"
+COMPLETED = "completed"
+FAILED = "failed"
 
 # Still in flight — the frontend polls while a feature is in one of these.
-ACTIVE = (INITIALIZED, PREPARING, RUNNING)
+ACTIVE = (RUNNING, REFINING)
