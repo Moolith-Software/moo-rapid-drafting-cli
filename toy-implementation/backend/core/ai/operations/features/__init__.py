@@ -9,6 +9,6 @@ the meaning of that reply all live here.
     schemas.py      the structured reply contract
 """
 
-from .operation import FeatureResult, add_feature, refine_feature
+from .operation import FeatureResult, add_feature, prewarm_ai_session, refine_feature
 
-__all__ = ["FeatureResult", "add_feature", "refine_feature"]
+__all__ = ["FeatureResult", "add_feature", "prewarm_ai_session", "refine_feature"]

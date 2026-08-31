@@ -36,6 +36,22 @@ def add_feature(
     )
 
 
+def prewarm_ai_session(workspace: Path) -> FeatureResult:
+    """
+    Run a throwaway turn so the prompt cache is warm and the thread has a
+    rollout to resume. Read-only, so it cannot leave the workspace dirty.
+    """
+    return _run(
+        workspace,
+        prompts.prime(),
+        schemas.PRIMING_SCHEMA,
+        schemas.parse_priming_ack,
+        None,
+        None,
+        read_only=True,
+    )
+
+
 def refine_feature(
     workspace: Path,
     recap: str,
@@ -60,6 +76,7 @@ def _run(
     parse: Callable[[str], dict],
     session_id: str | None,
     fork_from: str | None,
+    read_only: bool = False,
 ) -> FeatureResult:
     provider = providers.create_provider()
     outcome = provider.run_turn(
@@ -68,6 +85,7 @@ def _run(
         output_schema,
         session_id=session_id,
         fork_from=fork_from,
+        read_only=read_only,
     )
     # A turn that did not finish has already raised, so reaching here means the
     # provider has something to show for it.

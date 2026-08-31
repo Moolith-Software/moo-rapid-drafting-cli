@@ -41,6 +41,7 @@ class MockProvider(Provider):
         output_schema: dict,
         session_id: str | None = None,
         fork_from: str | None = None,
+        read_only: bool = False,
     ) -> TurnOutcome:
         if self.simulate_timeout:
             time.sleep(1)
@@ -51,10 +52,12 @@ class MockProvider(Provider):
         # Reuse whichever session we were given so resume/fork behave believably.
         session = session_id or fork_from or f"mock-{uuid.uuid4().hex[:8]}"
 
-        # A real edit, so snapshot/diff sees an actual change.
-        note = Path(workspace) / NOTE_FILE
-        previous = note.read_text() if note.exists() else ""
-        note.write_text(f"{previous}- {prompt.splitlines()[-1][:80]}\n")
+        # A real edit, so snapshot/diff sees an actual change — unless the turn
+        # was told it may not write, which is what a warm-up turn asks for.
+        if not read_only:
+            note = Path(workspace) / NOTE_FILE
+            previous = note.read_text() if note.exists() else ""
+            note.write_text(f"{previous}- {prompt.splitlines()[-1][:80]}\n")
 
         return TurnOutcome(text=self._placeholder(output_schema), session_id=session)
 
@@ -67,8 +70,9 @@ class MockProvider(Provider):
         operation.
         """
         properties = schema.get("properties", {})
+        stand_ins = {"array": [], "boolean": True, "integer": 0, "number": 0}
         reply = {}
         for key in schema.get("required", []):
             kind = properties.get(key, {}).get("type")
-            reply[key] = [] if kind == "array" else f"mock {key}"
+            reply[key] = stand_ins.get(kind, f"mock {key}")
         return json.dumps(reply)

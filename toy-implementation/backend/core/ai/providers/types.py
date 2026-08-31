@@ -74,6 +74,7 @@ class Provider(ABC):
         output_schema: dict,
         session_id: str | None = None,
         fork_from: str | None = None,
+        read_only: bool = False,
     ) -> TurnOutcome:
         """
         Run one turn over `workspace`.

@@ -65,6 +65,15 @@ def add(user_request: str) -> str:
     return f"{SYSTEM_PROMPT}\nUser Feature request:\n{user_request}"
 
 
+def prime() -> str:
+    """
+    A warm-up turn. Shares its whole prefix with `add` and `refine`, which is
+    the point: prompt caches match from the start and stop at the first byte
+    that differs, so warming anything else would warm the wrong thing.
+    """
+    return f"{SYSTEM_PROMPT}\nRespond with {{\"understood\": true}}. Change nothing."
+
+
 def refine(recap: str, user_request: str) -> str:
     """
     Follow-up turn. Resuming the Codex session already carries the real history,

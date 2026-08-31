@@ -51,8 +51,19 @@ class RefinementSummary(BaseModel):
     highlights: list[str] = _HIGHLIGHTS
 
 
+class PrimingAck(BaseModel):
+    """
+    Warm-up the LLM with a caching trick.
+    """
+
+    model_config = _STRICT
+
+    understood: bool = Field(description="Always true.")
+
+
 FEATURE_SCHEMA = FeatureSummary.model_json_schema()
 REFINEMENT_SCHEMA = RefinementSummary.model_json_schema()
+PRIMING_SCHEMA = PrimingAck.model_json_schema()
 
 
 def parse_feature_summary(reply: str) -> dict:
@@ -63,6 +74,11 @@ def parse_feature_summary(reply: str) -> dict:
 def parse_refinement_summary(reply: str) -> dict:
     """Read the reply to a turn that refined a feature."""
     return _parse(RefinementSummary, reply)
+
+
+def parse_priming_ack(reply: str) -> dict:
+    """Read the reply to a warm-up turn."""
+    return _parse(PrimingAck, reply)
 
 
 def _parse(model: type[BaseModel], reply: str) -> dict:

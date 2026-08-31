@@ -3,7 +3,7 @@ The two feature pipelines: adding a feature, and refining one.
 
 This module is only the *order* of the steps. Each step lives elsewhere:
 
-    core.instances        get a runnable instance ready (its own copy of the code)
+    core.environments     get a runnable environment ready (its own copy of the code)
     core.ai.operations.features     ask the AI to build or refine it
     core.changes          work out what actually changed on disk
     db                    record status and results
@@ -17,42 +17,91 @@ A feature is modelled two ways at once, and they stay in step:
     session a child forks its parent's session; a refinement resumes its own
 """
 
-import db
+import time
 
-from . import changes, errors, instances, statuses
+import db
+import preview
+
+from . import changes, environments, errors, statuses
 from . import workspace_manager as workspaces
 from .ai.operations import features as feature_ai
 
 
-def run_add(feature_id: int) -> None:
-    """Prepare an instance, have the AI add the feature, record the result."""
+def preload_environment(parent_id: int | None = None, feature: str = "") -> int | None:
+    """
+    Build an environment before anyone asks for one.
+
+    The frontend calls this on hover, so the slow parts — cloning, connecting,
+    warming the prompt cache, starting the preview — are already done by the
+    time a request is typed.
+    """
+    started = time.monotonic()
     try:
-        feature = db.get_feature(feature_id)
-        if not feature:  # feature_id should always be valid
-            print(
-                f"[pipeline] feature {feature_id} not found — "
-                "cannot write status or message to the db",
-                flush=True,
-            )
+        feature_id = db.create_feature(feature=feature, parent_id=parent_id)
+    except Exception as exc:
+        # Without a row there is nowhere to record this, so the log is all there
+        # is. `wrap` is what writes it.
+        errors.wrap(exc)
+        return None
+
+    try:
+        parent = db.get_feature(parent_id) if parent_id else None
+        env = environments.prepare_workspace(feature_id, parent)
+        db.update_feature(feature_id, code_folder_name=env.folder)
+
+        # Read-only, so it cannot edit anything and leave the environment dirty, caching only
+        result = feature_ai.prewarm_ai_session(env.workspace)
+        preview.start_preview(f"feature-{feature_id}", env.workspace)
+
+        db.update_feature(
+            feature_id,
+            codex_session_id=result.session_id,
+            status=statuses.READY,
+            progress="Ready.",
+        )
+        print(
+            f"[pipeline] preload_environment {feature_id} ready in "
+            f"{time.monotonic() - started:.2f}s",
+            flush=True,
+        )
+    except Exception as exc:
+        db.update_feature(
+            feature_id,
+            is_dirty=False,  # read-only priming cannot have edited anything
+            status=statuses.FAILED,
+            progress=errors.wrap(exc).status_line(),
+        )
+    return feature_id
+
+
+def run_add(user_request: str, parent_id: int | None = None) -> None:
+    """
+    Have the AI build a feature, then record the result.
+    """
+    feature = db.claim_ready(user_request)
+    if feature is None:  # nobody hovered, so build one now, already claimed
+        feature_id = preload_environment(parent_id, feature=user_request)
+        if feature_id is None:  # the row could not even be created; already logged
             return
-        if feature["status"] != statuses.READY or feature["is_dirty"]:
-            raise errors.InvalidFeature(
-                f"cannot use this feature row: status is {feature['status']!r}, "
-                f"is_dirty={feature['is_dirty']}"
-            )
-        db.set_status(feature_id, statuses.PREPARING, "Preparing a workspace…")
-        parent = db.get_feature(feature["parent_id"]) if feature["parent_id"] else None
-        instance = instances.prepare(feature_id, parent)
-        workspace = instance.workspace
-        db.update_feature(feature_id, code_folder_name=instance.folder)
+        feature = db.get_feature(feature_id)
+
+    # Final status guard
+    # a claim only ever hands back a ready row, so this is mainly about the fresh build.
+    # doing a return instead of throwing exception so we don't overwrite the failed
+    # status with lower level message
+    if feature["status"] != statuses.READY or feature["is_dirty"]:
+        return
+
+    feature_id = feature["id"]
+    try:
+        workspace = workspaces.path_for(feature["code_folder_name"])
 
         db.set_status(feature_id, statuses.RUNNING, "Implementing the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.add_feature(
             workspace,
-            feature["feature"],
-            session_id=instance.session_id,
-            fork_from=instance.fork_from,
+            user_request,
+            session_id=feature["codex_session_id"],
         )
         after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
@@ -86,7 +135,7 @@ def run_add(feature_id: int) -> None:
         )
 
 
-def run_refine(feature_id: int, user_request: str) -> None:
+def run_refine(feature_id: int, user_request: str) -> None:3
     """
     Apply a follow-up request to a feature that already ran.
 

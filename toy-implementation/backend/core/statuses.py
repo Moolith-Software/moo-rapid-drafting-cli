@@ -1,18 +1,18 @@
 """
 The states a feature moves through.
 
-    initialized -> preparing -> running -> completed
-                                        \\-> failed
+    initializing -> ready -> running   -> completed
+                                       \\-> failed
+                          -> refining  -> completed
 
 Defined once and imported everywhere (db, core, main) so the strings are never
 retyped. Deliberately dependency-free.
 """
 
-INITIALIZED = "initialized"  # row created, nothing done yet
-PREPARING = "preparing"
-READY = "ready"  # workspace is ready
-RUNNING = "running"  # the AI agent is working
-REFINING = "refining"
+INITIALIZING = "initializing"  # row exists; its environment is being built
+READY = "ready"  # environment built and warmed, waiting for a request
+RUNNING = "running"  # the AI agent is building the feature
+REFINING = "refining"  # the AI agent is changing one it already built
 COMPLETED = "completed"
 FAILED = "failed"
 

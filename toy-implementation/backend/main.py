@@ -1,34 +1,48 @@
 """
 FastAPI backend for the rapid-prototyping toy.
 
-Endpoints (from the flow diagram):
-  POST /features/initialize   create a feature + its CoW workspace (no AI yet)
-  POST /features/add          run Codex over the workspace in the background
-  POST /features/refine       run a refinement over the workspace in the background
-  GET  /features/{id}/status  poll the current status (for the frontend)
+Endpoints split by what they do to the world.
 
-Plus two conveniences the single-page UI needs:
-  GET  /features              list all features (newest first)
-  GET  /features/{id}         full detail for one feature
+  /core/*      things that happen. Each returns straight away and runs on a
+               background thread, so the caller polls to find out how it went.
 
-Everything AI-related runs on a background thread so requests return instantly.
+    POST /core/preload_environment   clone + warm an environment ahead of time
+    POST /core/add                   build a feature, claiming a warm environment
+    POST /core/refine                change a feature that already exists
+
+  /features/*  things that are. Plain reads of what the above produced.
+
+    GET  /features                   every feature, newest first
+    GET  /features/{id}              one feature in full
+    GET  /features/{id}/status       just the fields the frontend polls
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
 import db
 import preview
-from core import pipelines, workspace_manager
+import schemas
+from core import pipelines
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
 
-app = FastAPI(title="Rapid Prototyping Toy")
+# Basic Pool config sizes
+MAX_CONCURRENT_TURNS = 16
+MAX_CONCURRENT_PRELOADS = 8
+
+_FEATURE_POOL = ThreadPoolExecutor(MAX_CONCURRENT_TURNS, thread_name_prefix="feature")
+_PRELOAD_POOL = ThreadPoolExecutor(
+    MAX_CONCURRENT_PRELOADS, thread_name_prefix="preload"
+)
+
+
+app = FastAPI(title="Rapid Prototyping Tool")
 
 # The Vue dev server runs on a different port, so allow cross-origin calls.
 app.add_middleware(
@@ -47,88 +61,41 @@ def startup() -> None:
 @app.on_event("shutdown")
 def shutdown() -> None:
     preview.stop_all()  # don't leave orphan dev servers running
-
-
-# --- request bodies ---------------------------------------------------------
-
-class InitializeBody(BaseModel):
-    feature: str
-    parent_id: int | None = None
-
-
-class IdBody(BaseModel):
-    id: int
-
-
-class RefineBody(BaseModel):
-    id: int
-    user_request: str
+    _FEATURE_POOL.shutdown(wait=False, cancel_futures=True)
+    _PRELOAD_POOL.shutdown(wait=False, cancel_futures=True)
 
 
 # --- endpoints --------------------------------------------------------------
 
-@app.post("/features/initialize")
-def initialize(body: InitializeBody) -> dict:
+
+@app.post("/core/preload_environment", status_code=202)
+def preload_environment(body: schemas.PreloadEnvironmentBody) -> dict:
     """
-    Create an empty feature row. The workspace folder name is assigned later, at
-    clone time (pipelines.run_add), so it can carry a per-clone UUID — that keeps the
-    copy step create-only (it never has to delete an existing folder).
+    Build environments ahead of the requests that will use them.
     """
-    if not body.feature.strip():
-        raise HTTPException(400, "feature must not be empty")
-    return db.create_feature(body.feature.strip(), code_folder_name="pending", parent_id=body.parent_id)
+    for _ in range(body.count):
+        _PRELOAD_POOL.submit(pipelines.preload_environment, body.parent_id)
+    return {"queued": body.count}
 
 
-@app.post("/features/add", status_code=202)
-def add(body: IdBody, background: BackgroundTasks) -> dict:
-    """Kick off the Codex run for a feature in the background."""
-    feature = db.get_feature(body.id)
-    if not feature:
-        raise HTTPException(404, "feature not found")
-    background.add_task(pipelines.run_add, body.id)
-    return {"id": body.id, "status": "queued"}
+@app.post("/core/add", status_code=202)
+def add(body: schemas.AddBody) -> dict:
+    """
+    Build a feature. Claims a preloaded environment if one is waiting, and
+    builds one otherwise, so the caller never has to know which happened.
+    """
+    _FEATURE_POOL.submit(pipelines.run_add, body.feature, body.parent_id)
+    return {"status": "queued"}
 
 
-@app.post("/features/refine", status_code=202)
-def refine(body: RefineBody, background: BackgroundTasks) -> dict:
+@app.post("/core/refine", status_code=202)
+def refine(body: schemas.RefineBody) -> dict:
     """Kick off a Codex refinement for a feature in the background."""
     feature = db.get_feature(body.id)
     if not feature:
         raise HTTPException(404, "feature not found")
-    if not body.user_request.strip():
-        raise HTTPException(400, "user_request must not be empty")
-    background.add_task(pipelines.run_refine, body.id, body.user_request.strip())
+    _FEATURE_POOL.submit(pipelines.run_refine, body.id, body.user_request)
     return {"id": body.id, "status": "queued"}
-
-
-@app.get("/features/{feature_id}/status")
-def status(feature_id: int) -> dict:
-    feature = db.get_feature(feature_id)
-    if not feature:
-        raise HTTPException(404, "feature not found")
-    return {
-        "id": feature["id"],
-        "status": feature["status"],
-        "progress": feature["progress"],
-    }
-
-
-@app.post("/preview/base")
-def preview_base() -> dict:
-    """Start (or reuse) a dev server for the pristine base app."""
-    return preview.start_preview("base", workspace_manager.BASE_DIR)
-
-
-@app.post("/features/{feature_id}/preview")
-def preview_feature(feature_id: int) -> dict:
-    """Start (or reuse) a dev server for a feature's workspace."""
-    feature = db.get_feature(feature_id)
-    if not feature:
-        raise HTTPException(404, "feature not found")
-    workspace = workspace_manager.path_for(feature["code_folder_name"])
-    if not workspace.exists():
-        raise HTTPException(409, "workspace not built yet")
-    return preview.start_preview(feature["code_folder_name"], workspace)
 
 
 @app.get("/features")
@@ -142,3 +109,15 @@ def detail(feature_id: int) -> dict:
     if not feature:
         raise HTTPException(404, "feature not found")
     return feature
+
+
+@app.get("/features/{feature_id}/status")
+def status(feature_id: int) -> dict:
+    feature = db.get_feature(feature_id)
+    if not feature:
+        raise HTTPException(404, "feature not found")
+    return {
+        "id": feature["id"],
+        "status": feature["status"],
+        "progress": feature["progress"],
+    }

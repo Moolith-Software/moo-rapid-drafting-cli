@@ -118,10 +118,13 @@ class CodexProvider(Provider):
         output_schema: dict,
         session_id: str | None = None,
         fork_from: str | None = None,
+        read_only: bool = False,
     ) -> TurnOutcome:
         try:
             with self._connect() as codex:
-                thread = self._open_thread(codex, workspace, session_id, fork_from)
+                thread = self._open_thread(
+                    codex, workspace, session_id, fork_from, read_only
+                )
                 handle = thread.turn(
                     prompt,
                     output_schema=output_schema,
@@ -221,6 +224,7 @@ class CodexProvider(Provider):
         workspace: Path,
         session_id: str | None,
         fork_from: str | None,
+        read_only: bool = False,
     ):
         """
         Branch, continue, or start a conversation — see the module docstring.
@@ -229,7 +233,8 @@ class CodexProvider(Provider):
         so here, before any turn runs, so we fall back to a fresh session and
         lose the conversation history — never the work, which is on disk.
         """
-        options = dict(cwd=str(workspace), sandbox=Sandbox.workspace_write)
+        sandbox = Sandbox.read_only if read_only else Sandbox.workspace_write
+        options = dict(cwd=str(workspace), sandbox=sandbox)
         try:
             if fork_from:
                 return codex.thread_fork(fork_from, **options)

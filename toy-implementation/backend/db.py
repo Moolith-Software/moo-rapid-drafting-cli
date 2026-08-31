@@ -39,7 +39,7 @@ def init_db() -> None:
             file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}, deterministic
             summary        TEXT NOT NULL DEFAULT '{}',     -- JSON: FeatureSummary (AI human-readable layer)
             refinements    TEXT NOT NULL DEFAULT '[]',    -- JSON: [{refinement_id, user_request, file_changes, summary}]
-            status         TEXT NOT NULL DEFAULT 'initialized',
+            status         TEXT NOT NULL DEFAULT 'initializing',
             progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
             codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
             is_dirty       INTEGER NOT NULL DEFAULT 0,    -- the workspace has been edited; never goes back to 0
@@ -91,20 +91,25 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return data
 
 
-def create_feature(feature: str, code_folder_name: str, parent_id: int | None) -> dict:
-    """Insert a fresh feature row and return it."""
+def create_feature(feature: str = "", parent_id: int | None = None) -> int:
+    """
+    Insert a fresh feature row and return its id.
+
+    `code_folder_name` is left empty for whoever clones the workspace to fill
+    in, because the folder is named after the id this insert is what creates.
+    """
     conn = connect()
     cur = conn.execute(
         """
         INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (parent_id, code_folder_name, feature, statuses.INITIALIZED, time.time()),
+        (parent_id, "", feature, statuses.INITIALIZING, time.time()),
     )
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
-    return get_feature(new_id)
+    return new_id
 
 
 def get_feature(feature_id: int) -> dict | None:
@@ -119,6 +124,30 @@ def list_features() -> list[dict]:
     rows = conn.execute("SELECT * FROM features ORDER BY created_at DESC").fetchall()
     conn.close()
     return [_row_to_dict(r) for r in rows]
+
+
+def claim_ready(user_request: str) -> dict | None:
+    """
+    Hand a preloaded row to a request, or None when none is waiting.
+
+    Does select and update at the same time to prevent conflicts over prepared environments.
+    """
+    conn = connect()
+    row = conn.execute(
+        """
+        UPDATE features SET feature = ?
+        WHERE id = (
+            SELECT id FROM features
+            WHERE status = ? AND feature = '' AND is_dirty = 0
+            ORDER BY created_at LIMIT 1
+        )
+        RETURNING id
+        """,
+        (user_request, statuses.READY),
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    return get_feature(row["id"]) if row else None
 
 
 def set_status(feature_id: int, status: str, progress: str) -> None:
