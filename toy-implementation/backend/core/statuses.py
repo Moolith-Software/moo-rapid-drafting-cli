@@ -17,4 +17,4 @@ COMPLETED = "completed"
 FAILED = "failed"
 
 # Still in flight — the frontend polls while a feature is in one of these.
-ACTIVE = (RUNNING, REFINING)
+ACTIVE = (INITIALIZING, RUNNING, REFINING)

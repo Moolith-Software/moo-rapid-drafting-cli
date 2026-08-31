@@ -27,7 +27,7 @@ from . import workspace_manager as workspaces
 from .ai.operations import features as feature_ai
 
 
-def preload_environment(parent_id: int | None = None, feature: str = "") -> int | None:
+def preload_environment(parent_id: int | None = None, feature: str = "") -> dict | None:
     """
     Build an environment before anyone asks for one.
 
@@ -71,7 +71,7 @@ def preload_environment(parent_id: int | None = None, feature: str = "") -> int 
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )
-    return feature_id
+    return db.get_feature(feature_id)
 
 
 def run_add(user_request: str, parent_id: int | None = None) -> None:
@@ -79,18 +79,12 @@ def run_add(user_request: str, parent_id: int | None = None) -> None:
     Have the AI build a feature, then record the result.
     """
     feature = db.claim_ready(user_request)
-    if feature is None:  # nobody hovered, so build one now, already claimed
-        feature_id = preload_environment(parent_id, feature=user_request)
-        if feature_id is None:  # the row could not even be created; already logged
+    if feature is None:  # nobody hovered, so build one now — created already claimed
+        feature = preload_environment(parent_id, feature=user_request)
+        # Either no row exists to run against, or the build failed and already wrote
+        # why on the row. Returning leaves that reason in place
+        if feature is None or feature["status"] != statuses.READY:
             return
-        feature = db.get_feature(feature_id)
-
-    # Final status guard
-    # a claim only ever hands back a ready row, so this is mainly about the fresh build.
-    # doing a return instead of throwing exception so we don't overwrite the failed
-    # status with lower level message
-    if feature["status"] != statuses.READY or feature["is_dirty"]:
-        return
 
     feature_id = feature["id"]
     try:
@@ -135,7 +129,7 @@ def run_add(user_request: str, parent_id: int | None = None) -> None:
         )
 
 
-def run_refine(feature_id: int, user_request: str) -> None:3
+def run_refine(feature_id: int, user_request: str) -> None:
     """
     Apply a follow-up request to a feature that already ran.
 
