@@ -6,7 +6,7 @@ Endpoints split by what they do to the world.
   /core/*      significant functionality - creating the environment + AI integration
 
     POST /core/preload_environment   clone + warm an environment ahead of time
-    POST /core/add                  build a feature, claiming a warm environment if available
+    POST /core/add                   build one or many features, claiming warm environments
     POST /core/refine                update a feature that already exists
 
   /features/*  feature metadata related calls
@@ -78,20 +78,22 @@ def preload_environment(body: schemas.PreloadEnvironmentBody) -> dict:
 
 
 @app.post("/core/add", status_code=202)
-def add(body: schemas.AddBody) -> dict:
+def add(body: schemas.AddBody) -> schemas.AddResponse:
     """
-    Build a feature. Claims a preloaded environment if one is waiting, or
-    creates an empty claimed db row otherwise, both return a feature id
+    Build a feature, or a batch of them.
     """
-    feature_id = db.claim_ready(
-        body.feature_request, body.parent_id
-    ) or db.create_feature(
-        feature_request=body.feature_request,
-        parent_id=body.parent_id,
+    reserved = db.reserve_features(body.feature_requests, body.parent_id)
+    for feature_id, _ in reserved:
+        _FEATURE_POOL.submit(pipelines.run_add, feature_id)
+    return schemas.AddResponse(
+        features=[
+            schemas.QueuedFeature(
+                feature_id=feature_id, feature_request=feature_request
+            )
+            for feature_id, feature_request in reserved
+        ],
         status=statuses.QUEUED,
     )
-    _FEATURE_POOL.submit(pipelines.run_add, feature_id)
-    return {"feature_id": feature_id, "status": statuses.QUEUED}
 
 
 @app.post("/core/refine", status_code=202)

@@ -68,13 +68,9 @@ def init_db() -> None:
 # --- core / features  ---------------------------------------------------------------
 
 
-def create_feature(
-    feature_request: str = "",
-    parent_id: int | None = None,
-    status: str = statuses.INITIALIZING,
-) -> int:
+def create_feature(parent_id: int | None = None) -> int:
     """
-    Insert a fresh feature row and return its id.
+    Insert an empty preload row and return its id.
 
     `code_folder_name` is left empty for whoever clones the workspace to fill
     in, because the folder is named after the id this insert is what creates.
@@ -83,12 +79,11 @@ def create_feature(
     cur = conn.execute(
         """
         INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
-        VALUES (:parent_id, '', :feature_request, :status, :created_at)
+        VALUES (:parent_id, '', '', :status, :created_at)
         """,
         {
             "parent_id": parent_id,
-            "feature_request": feature_request,
-            "status": status,
+            "status": statuses.INITIALIZING,
             "created_at": time.time(),
         },
     )
@@ -98,41 +93,117 @@ def create_feature(
     return new_id
 
 
-def claim_ready(feature_request: str, parent_id: int | None = None) -> int | None:
+def reserve_features(
+    feature_requests: list[str], parent_id: int | None = None
+) -> list[tuple[int, str]]:
     """
-    Hand a preloaded environment to a request, or None when none is available or in ready state.
+    Reserve a queued row for every request, and return each id next to the
+    request it was given, in the order the requests came in.
 
-    Selects and updates in one statement, so two requests can never claim the
-    same environment. `parent_id IS :parent_id` matches null-safely, so a request for a
-    child only ever gets an environment cloned from that same parent.
+    A request takes a preloaded environment when one is free, and gets a fresh
+    empty row when none is. Both land in `queued`, and run_add tells them apart
+    by whether the row already has a workspace.
 
-    Right now, it returns ascending results (oldest environments), even though the AI
-    provider's cache is only guaranteed for 30 minutes after its last write or reuse.
-    Otherwise, DESC would never pick up the eldest workspaces. No reaper implemented
-    either to automatically prune workspaces/preview environments  older than 30 minutes.
+    Both halves below already know which request went to which row while they
+    are writing it, so they hand that back rather than only the ids.
+
+    One connection and one commit however long the batch is, which is the point:
+    several hundred requests reserve in about the time a single one used to.
     """
+    if not feature_requests:
+        return []
+
     conn = connect()
-    row = conn.execute(
-        """
-        UPDATE features SET feature = :feature_request, status = :taken, progress = ''
-        WHERE id = (
+
+    # BEGIN IMMEDIATE is what buys it back: takes the write lock before the
+    # select, so a second caller waits here rather than reading rows this one is
+    # about to take. Removing this line reintroduces double claims.
+    conn.execute("BEGIN IMMEDIATE")
+
+    # Claim what we can, create fresh rows for the rest, return in order
+    claimed = _claim_ready(conn, feature_requests, parent_id)
+    uncovered = feature_requests[len(claimed) :]
+    created = _create_queued(conn, uncovered, parent_id)
+
+    conn.commit()
+    conn.close()
+    return claimed + created
+
+
+def _claim_ready(
+    conn: sqlite3.Connection, feature_requests: list[str], parent_id: int | None
+) -> list[int]:
+    """
+    Match preloaded environments that are available to feature requests coming in.
+
+    `parent_id IS :parent_id` matches null-safely, so a request for a child only
+    ever gets an environment cloned from that same parent.
+
+    Oldest first, even though the AI provider's cache is only guaranteed for 30
+    minutes after its last write or reuse. Newest first would leave the eldest
+    workspaces never picked up, and there is no reaper yet to prune workspaces
+    or preview environments older than 30 minutes.
+    """
+    ready = [
+        row["id"]
+        for row in conn.execute(
+            """
             SELECT id FROM features
             WHERE status = :wanted AND feature = '' AND is_dirty = 0
               AND parent_id IS :parent_id
-            ORDER BY created_at LIMIT 1
+            ORDER BY created_at
+            LIMIT :count
+            """,
+            {
+                "wanted": statuses.READY,
+                "parent_id": parent_id,
+                "count": len(feature_requests),
+            },
         )
-        RETURNING id
+    ]
+    taken = list(zip(ready, feature_requests))
+    conn.executemany(
+        """
+        UPDATE features SET feature = :feature_request, status = :taken, progress = ''
+        WHERE id = :feature_id
         """,
-        {
-            "feature_request": feature_request,
-            "taken": statuses.QUEUED,
-            "wanted": statuses.READY,
-            "parent_id": parent_id,
-        },
-    ).fetchone()
-    conn.commit()
-    conn.close()
-    return row["id"] if row else None
+        [
+            {
+                "feature_request": feature_request,
+                "taken": statuses.QUEUED,
+                "feature_id": feature_id,
+            }
+            for feature_id, feature_request in taken
+        ],
+    )
+    return taken
+
+
+def _create_queued(
+    conn: sqlite3.Connection, feature_requests: list[str], parent_id: int | None
+) -> list[tuple[int, str]]:
+    """
+    Create an already-claimed row for every request where no environment was available
+    and return each id next to its request. These carry no workspace, which tells the
+    worker to initialize a fresh environment.
+    """
+    created_at = time.time()
+    rows = []
+    for feature_request in feature_requests:
+        cur = conn.execute(
+            """
+            INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
+            VALUES (:parent_id, '', :feature_request, :status, :created_at)
+            """,
+            {
+                "parent_id": parent_id,
+                "feature_request": feature_request,
+                "status": statuses.QUEUED,
+                "created_at": created_at,
+            },
+        )
+        rows.append((cur.lastrowid, feature_request))
+    return rows
 
 
 def claim_for_refine(feature_id: int) -> int | None:
