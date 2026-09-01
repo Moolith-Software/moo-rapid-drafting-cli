@@ -22,11 +22,32 @@ class PreloadEnvironmentBody(BaseModel):
     parent_id: int | None = Field(None, ge=1)
 
 
+RequestBatch = Annotated[
+    list[Request], Field(min_length=1, max_length=constants.MAX_ADD_FEATURES)
+]
+
+
 class AddBody(BaseModel):
     feature_requests: Annotated[
-        list[Request], Field(min_length=1, max_length=constants.MAX_ADD_FEATURES)
+        RequestBatch,
+        Field(
+            description="One feature request, or many. "
+            "A single string is treated as a batch of one."
+        ),
     ]
     parent_id: int | None = Field(None, ge=1)
+
+    @field_validator(
+        "feature_requests",
+        mode="before",
+        json_schema_input_type=Request | RequestBatch,
+    )
+    @classmethod
+    def _wrap_single(cls, value):
+        """
+        Accept one request as a bare string and make it an array of one
+        """
+        return [value] if isinstance(value, str) else value
 
 
 # Trim the original 'feature' response, otherwise 10K chars could become a 10mb response
