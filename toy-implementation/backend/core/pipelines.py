@@ -8,6 +8,10 @@ This module is only the *order* of the steps. Each step lives elsewhere:
     core.changes          work out what actually changed on disk
     db                    record status and results
 
+Which row to work on is settled in main.py, in the request thread: it claims a
+warm environment or creates an empty row, and passes the id here. So every
+function below starts from a row that already exists.
+
 Both pipelines run on a background thread, so the HTTP request returns straight
 away and the frontend polls for status.
 
@@ -27,7 +31,7 @@ from . import workspace_manager as workspaces
 from .ai.operations import features as feature_ai
 
 
-def preload_environment(parent_id: int | None = None, feature: str = "") -> dict | None:
+def preload_environment(parent_id: int | None = None) -> None:
     """
     Build an environment before anyone asks for one.
 
@@ -35,17 +39,31 @@ def preload_environment(parent_id: int | None = None, feature: str = "") -> dict
     warming the prompt cache, starting the preview — are already done by the
     time a request is typed.
     """
-    started = time.monotonic()
     try:
-        feature_id = db.create_feature(feature=feature, parent_id=parent_id)
+        feature_id = db.create_feature(parent_id=parent_id)
     except Exception as exc:
-        # Without a row there is nowhere to record this, so the log is all there
-        # is. `wrap` is what writes it.
+        # Nobody is waiting on this one, so there is no row and no caller to
+        # tell. The log is the only record. `wrap` is what writes it.
         errors.wrap(exc)
-        return None
+        return
+    build_environment(feature_id)
 
+
+def build_environment(feature_id: int) -> dict | None:
+    """
+    Give an existing row a workspace and a warm AI session.
+
+    A row nobody has claimed joins the warm pool, so it ends `ready`.
+    Otherwise, it is already claimed so will skip in the next step from `initializing` to `building`
+
+    Returns the finished row, or None when the build failed
+    """
+    started = time.monotonic()
+    row = db.get_feature(feature_id)
     try:
-        parent = db.get_feature(parent_id) if parent_id else None
+        db.set_status(feature_id, statuses.INITIALIZING, "Preparing the environment…")
+
+        parent = db.get_feature(row["parent_id"]) if row["parent_id"] else None
         env = environments.prepare_workspace(feature_id, parent)
         db.update_feature(feature_id, code_folder_name=env.folder)
 
@@ -53,14 +71,12 @@ def preload_environment(parent_id: int | None = None, feature: str = "") -> dict
         result = feature_ai.prewarm_ai_session(env.workspace)
         preview.start_preview(f"feature-{feature_id}", env.workspace)
 
-        db.update_feature(
-            feature_id,
-            codex_session_id=result.session_id,
-            status=statuses.READY,
-            progress="Ready.",
-        )
+        db.update_feature(feature_id, codex_session_id=result.session_id)
+        if not row["feature"]:  # no request attached, so it joins the warm pool
+            db.update_feature(feature_id, status=statuses.READY, progress="Ready.")
+
         print(
-            f"[pipeline] preload_environment {feature_id} ready in "
+            f"[pipeline] environment {feature_id} ready in "
             f"{time.monotonic() - started:.2f}s",
             flush=True,
         )
@@ -71,31 +87,34 @@ def preload_environment(parent_id: int | None = None, feature: str = "") -> dict
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )
+        return None
     return db.get_feature(feature_id)
 
 
-def run_add(user_request: str, parent_id: int | None = None) -> None:
+def run_add(feature_id: int) -> None:
     """
     Have the AI build a feature, then record the result.
+
+    The row arrives already taken: either a warm environment that was waiting,
+    or an empty row that still needs one built.
     """
-    feature = db.claim_ready(user_request)
-    if feature is None:  # nobody hovered, so build one now — created already claimed
-        feature = preload_environment(parent_id, feature=user_request)
-        # Either no row exists to run against, or the build failed and already wrote
-        # why on the row. Returning leaves that reason in place
-        if feature is None or feature["status"] != statuses.READY:
+    row = db.get_feature(feature_id)
+    if not row[
+        "code_folder_name"
+    ]:  # arrived without a 'ready' environment, so build one now
+        row = build_environment(feature_id)
+        if row is None:  # the build failed and already wrote why on the row
             return
 
-    feature_id = feature["id"]
     try:
-        workspace = workspaces.path_for(feature["code_folder_name"])
+        workspace = workspaces.path_for(row["code_folder_name"])
 
-        db.set_status(feature_id, statuses.RUNNING, "Implementing the feature…")
+        db.set_status(feature_id, statuses.BUILDING, "Implementing the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.add_feature(
             workspace,
-            user_request,
-            session_id=feature["codex_session_id"],
+            row["feature"],
+            session_id=row["codex_session_id"],
         )
         after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
@@ -135,25 +154,14 @@ def run_refine(feature_id: int, user_request: str) -> None:
 
     Resumes the feature's own session, so the AI continues from its real history
     rather than being re-briefed, and edits the same workspace in place.
+
+    main.py reserved the row before submitting this, so it is known refinable
+    and no second refinement can be running against the same workspace.
     """
+    row = db.get_feature(feature_id)
     try:
-        feature = db.get_feature(feature_id)
-        if not feature:
-            # Nothing to report against: a status write targets this row, so with
-            # no row there is nowhere to record the failure. Log and stop.
-            print(
-                f"[pipeline] feature {feature_id} not found — "
-                "cannot write status or message to the db",
-                flush=True,
-            )
-            return
-        if feature["status"] != statuses.COMPLETED:
-            raise errors.InvalidFeature(
-                f"cannot refine this feature row: status is {feature['status']!r}, "
-                f"expected {statuses.COMPLETED!r}"
-            )
-        workspace = workspaces.path_for(feature["code_folder_name"])
-        recap = _recap(feature)
+        workspace = workspaces.path_for(row["code_folder_name"])
+        recap = _recap(row)
 
         db.set_status(feature_id, statuses.REFINING, "Refining the feature…")
         before = changes.snapshot(workspace)
@@ -161,7 +169,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
             workspace,
             recap,
             user_request,
-            session_id=feature["codex_session_id"],
+            session_id=row["codex_session_id"],
         )
         after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
@@ -173,7 +181,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
 
         db.update_feature(
             feature_id,
-            refinements=_append_refinement(feature, user_request, file_changes, result),
+            refinements=_append_refinement(row, user_request, file_changes, result),
             codex_session_id=result.session_id,
             is_dirty=True,
             status=statuses.COMPLETED,
@@ -192,13 +200,13 @@ def run_refine(feature_id: int, user_request: str) -> None:
 # --- recording -------------------------------------------------------------
 
 
-def _recap(feature: dict) -> str:
+def _recap(row: dict) -> str:
     """
     What the feature does so far — the first turn, then each refinement in order.
     Only place we have this is history is here, otherwise model wouldn't see these changes.
     """
-    story = [feature["summary"].get("summary") or feature["feature"]]
-    for refinement in feature["refinements"]:
+    story = [row["summary"].get("summary") or row["feature"]]
+    for refinement in row["refinements"]:
         summary = refinement.get("summary")
         if isinstance(summary, dict) and summary.get("summary"):
             story.append(summary["summary"])
@@ -206,10 +214,10 @@ def _recap(feature: dict) -> str:
 
 
 def _append_refinement(
-    feature: dict, user_request: str, file_changes: list, result
+    row: dict, user_request: str, file_changes: list, result
 ) -> list:
     """Add this refinement to the feature's history."""
-    refinements = feature["refinements"]
+    refinements = row["refinements"]
     return refinements + [
         {
             "refinement_id": len(refinements) + 1,

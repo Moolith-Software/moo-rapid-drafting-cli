@@ -11,11 +11,14 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-
 from core import statuses
+
 
 # The database lives next to this file, under data/.
 DB_PATH = Path(__file__).parent / "data" / "app.db"
+
+
+# --- storage ----------------------------------------------------------------
 
 
 def connect() -> sqlite3.Connection:
@@ -62,6 +65,151 @@ def init_db() -> None:
     conn.close()
 
 
+# --- core / features  ---------------------------------------------------------------
+
+
+def create_feature(
+    feature_request: str = "",
+    parent_id: int | None = None,
+    status: str = statuses.INITIALIZING,
+) -> int:
+    """
+    Insert a fresh feature row and return its id.
+
+    `code_folder_name` is left empty for whoever clones the workspace to fill
+    in, because the folder is named after the id this insert is what creates.
+    """
+    conn = connect()
+    cur = conn.execute(
+        """
+        INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
+        VALUES (:parent_id, '', :feature_request, :status, :created_at)
+        """,
+        {
+            "parent_id": parent_id,
+            "feature_request": feature_request,
+            "status": status,
+            "created_at": time.time(),
+        },
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+
+def claim_ready(feature_request: str, parent_id: int | None = None) -> int | None:
+    """
+    Hand a preloaded environment to a request, or None when none is available or in ready state.
+
+    Selects and updates in one statement, so two requests can never claim the
+    same environment. `parent_id IS :parent_id` matches null-safely, so a request for a
+    child only ever gets an environment cloned from that same parent.
+
+    Right now, it returns ascending results (oldest environments), even though the AI
+    provider's cache is only guaranteed for 30 minutes after its last write or reuse.
+    Otherwise, DESC would never pick up the eldest workspaces. No reaper implemented
+    either to automatically prune workspaces/preview environments  older than 30 minutes.
+    """
+    conn = connect()
+    row = conn.execute(
+        """
+        UPDATE features SET feature = :feature_request, status = :taken, progress = ''
+        WHERE id = (
+            SELECT id FROM features
+            WHERE status = :wanted AND feature = '' AND is_dirty = 0
+              AND parent_id IS :parent_id
+            ORDER BY created_at LIMIT 1
+        )
+        RETURNING id
+        """,
+        {
+            "feature_request": feature_request,
+            "taken": statuses.QUEUED,
+            "wanted": statuses.READY,
+            "parent_id": parent_id,
+        },
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    return row["id"] if row else None
+
+
+def claim_for_refine(feature_id: int) -> int | None:
+    """
+    Reserve a feature for refinement, or None when it cannot be refined.
+
+    Checks and transitions in one statement, so of two refine requests for the
+    same feature only one ever starts a turn — the other sees None.
+
+    A failed feature is refinable, which is how a failed run gets retried
+    """
+    conn = connect()
+    row = conn.execute(
+        """
+        UPDATE features SET status = :taken, progress = ''
+        WHERE id = :feature_id
+          AND status IN (:completed, :failed)
+          AND code_folder_name != ''
+        RETURNING id
+        """,
+        {
+            "taken": statuses.QUEUED,
+            "feature_id": feature_id,
+            "completed": statuses.COMPLETED,
+            "failed": statuses.FAILED,
+        },
+    ).fetchone()
+    conn.commit()
+    conn.close()
+    return row["id"] if row else None
+
+
+def update_feature(feature_id: int, **fields) -> None:
+    """
+    Patch arbitrary columns on a feature. JSON columns are encoded automatically,
+    so callers can pass Python lists/dicts directly.
+    """
+    if not fields:
+        return
+    for col in _JSON_COLUMNS:
+        if col in fields and not isinstance(fields[col], str):
+            fields[col] = json.dumps(fields[col])
+
+    assignments = ", ".join(f"{key} = :{key}" for key in fields)
+    conn = connect()
+    conn.execute(
+        f"UPDATE features SET {assignments} WHERE id = :feature_id",
+        {**fields, "feature_id": feature_id},
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_status(feature_id: int, status: str, progress: str) -> None:
+    """Record a pipeline state change (what /status reports)."""
+    update_feature(feature_id, status=status, progress=progress)
+
+
+def get_feature(feature_id: int) -> dict | None:
+    conn = connect()
+    row = conn.execute(
+        "SELECT * FROM features WHERE id = :feature_id", {"feature_id": feature_id}
+    ).fetchone()
+    conn.close()
+    return _row_to_dict(row) if row else None
+
+
+def list_features() -> list[dict]:
+    conn = connect()
+    rows = conn.execute("SELECT * FROM features ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return [_row_to_dict(r) for r in rows]
+
+
+# --- row encoding -----------------------------------------------------------
+
+
 # JSON columns we transparently encode on write.
 _JSON_COLUMNS = ("file_changes", "refinements", "summary")
 
@@ -89,86 +237,3 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     data["summary"] = _normalize_summary(data["summary"])
     data["is_dirty"] = bool(data["is_dirty"])
     return data
-
-
-def create_feature(feature: str = "", parent_id: int | None = None) -> int:
-    """
-    Insert a fresh feature row and return its id.
-
-    `code_folder_name` is left empty for whoever clones the workspace to fill
-    in, because the folder is named after the id this insert is what creates.
-    """
-    conn = connect()
-    cur = conn.execute(
-        """
-        INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (parent_id, "", feature, statuses.INITIALIZING, time.time()),
-    )
-    conn.commit()
-    new_id = cur.lastrowid
-    conn.close()
-    return new_id
-
-
-def get_feature(feature_id: int) -> dict | None:
-    conn = connect()
-    row = conn.execute("SELECT * FROM features WHERE id = ?", (feature_id,)).fetchone()
-    conn.close()
-    return _row_to_dict(row) if row else None
-
-
-def list_features() -> list[dict]:
-    conn = connect()
-    rows = conn.execute("SELECT * FROM features ORDER BY created_at DESC").fetchall()
-    conn.close()
-    return [_row_to_dict(r) for r in rows]
-
-
-def claim_ready(user_request: str) -> dict | None:
-    """
-    Hand a preloaded row to a request, or None when none is waiting.
-
-    Does select and update at the same time to prevent conflicts over prepared environments.
-    """
-    conn = connect()
-    row = conn.execute(
-        """
-        UPDATE features SET feature = ?
-        WHERE id = (
-            SELECT id FROM features
-            WHERE status = ? AND feature = '' AND is_dirty = 0
-            ORDER BY created_at LIMIT 1
-        )
-        RETURNING id
-        """,
-        (user_request, statuses.READY),
-    ).fetchone()
-    conn.commit()
-    conn.close()
-    return get_feature(row["id"]) if row else None
-
-
-def set_status(feature_id: int, status: str, progress: str) -> None:
-    """Record a pipeline state change (what /status reports)."""
-    update_feature(feature_id, status=status, progress=progress)
-
-
-def update_feature(feature_id: int, **fields) -> None:
-    """
-    Patch arbitrary columns on a feature. JSON columns are encoded automatically,
-    so callers can pass Python lists/dicts directly.
-    """
-    if not fields:
-        return
-    for col in _JSON_COLUMNS:
-        if col in fields and not isinstance(fields[col], str):
-            fields[col] = json.dumps(fields[col])
-
-    assignments = ", ".join(f"{key} = ?" for key in fields)
-    values = list(fields.values()) + [feature_id]
-    conn = connect()
-    conn.execute(f"UPDATE features SET {assignments} WHERE id = ?", values)
-    conn.commit()
-    conn.close()

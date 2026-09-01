@@ -3,14 +3,13 @@ FastAPI backend for the rapid-prototyping toy.
 
 Endpoints split by what they do to the world.
 
-  /core/*      things that happen. Each returns straight away and runs on a
-               background thread, so the caller polls to find out how it went.
+  /core/*      significant functionality - creating the environment + AI integration
 
     POST /core/preload_environment   clone + warm an environment ahead of time
-    POST /core/add                   build a feature, claiming a warm environment
-    POST /core/refine                change a feature that already exists
+    POST /core/add                  build a feature, claiming a warm environment if available
+    POST /core/refine                update a feature that already exists
 
-  /features/*  things that are. Plain reads of what the above produced.
+  /features/*  feature metadata related calls
 
     GET  /features                   every feature, newest first
     GET  /features/{id}              one feature in full
@@ -27,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 import preview
 import schemas
-from core import pipelines
+from core import pipelines, statuses
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -81,21 +80,31 @@ def preload_environment(body: schemas.PreloadEnvironmentBody) -> dict:
 @app.post("/core/add", status_code=202)
 def add(body: schemas.AddBody) -> dict:
     """
-    Build a feature. Claims a preloaded environment if one is waiting, and
-    builds one otherwise, so the caller never has to know which happened.
+    Build a feature. Claims a preloaded environment if one is waiting, or
+    creates an empty claimed db row otherwise, both return a feature id
     """
-    _FEATURE_POOL.submit(pipelines.run_add, body.feature, body.parent_id)
-    return {"status": "queued"}
+    feature_id = db.claim_ready(
+        body.feature_request, body.parent_id
+    ) or db.create_feature(
+        feature_request=body.feature_request,
+        parent_id=body.parent_id,
+        status=statuses.QUEUED,
+    )
+    _FEATURE_POOL.submit(pipelines.run_add, feature_id)
+    return {"feature_id": feature_id, "status": statuses.QUEUED}
 
 
 @app.post("/core/refine", status_code=202)
 def refine(body: schemas.RefineBody) -> dict:
-    """Kick off a Codex refinement for a feature in the background."""
-    feature = db.get_feature(body.id)
-    if not feature:
+    """
+    Update a feature in a workspace that already exists.
+    """
+    if not db.get_feature(body.feature_id):
         raise HTTPException(404, "feature not found")
-    _FEATURE_POOL.submit(pipelines.run_refine, body.id, body.user_request)
-    return {"id": body.id, "status": "queued"}
+    if db.claim_for_refine(body.feature_id) is None:
+        raise HTTPException(409, "feature is not in a refinable state")
+    _FEATURE_POOL.submit(pipelines.run_refine, body.feature_id, body.user_request)
+    return {"feature_id": body.feature_id, "status": statuses.QUEUED}
 
 
 @app.get("/features")

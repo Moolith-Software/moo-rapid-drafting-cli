@@ -16,10 +16,10 @@ class PreloadEnvironmentBody(BaseModel):
 
 
 class AddBody(BaseModel):
-    feature: Request
+    feature_request: Request
     parent_id: int | None = None
 
 
 class RefineBody(BaseModel):
-    id: int
+    feature_id: int
     user_request: Request
