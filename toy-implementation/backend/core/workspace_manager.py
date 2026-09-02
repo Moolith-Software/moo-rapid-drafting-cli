@@ -1,10 +1,12 @@
 """
-Per-feature workspace folders, each a CoW clone (`cp -c`, APFS-only) of base/
-or a parent feature. Owns the workspaces dir, folder naming, and cloning —
-nothing about features, the database, or the AI.
+Per-feature workspace folders, each a CoW clone (`clonefile(2)`, APFS-only)
+of base/ or a parent feature. Owns the workspaces dir, folder naming, and
+cloning — nothing about features, the database, or the AI.
 """
 
-import subprocess
+import ctypes
+import os
+import shutil
 import uuid
 from pathlib import Path
 
@@ -13,6 +15,11 @@ from .errors import CopyUnavailable, WorkspaceExists
 BACKEND_DIR = Path(__file__).resolve().parents[1]  # this file lives in core/
 BASE_DIR = BACKEND_DIR.parent / "base"  # the pristine seed codebase
 WORKSPACES_DIR = BACKEND_DIR / "workspaces"  # per-feature CoW clones live here
+
+# clonefile(2) clones a whole tree in one syscall, and has no stdlib wrapper.
+_libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+_libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+_libc.clonefile.restype = ctypes.c_int
 
 
 def new_folder_name(feature_id: int) -> str:
@@ -43,8 +50,8 @@ def clone_from(source_folder: str, folder_name: str) -> Path:
 
 def _cow_copy(source: Path, dest: Path) -> Path:
     """
-    Clone `source` to `dest` via APFS copy-on-write (`cp -c`) — near-instant
-    and cheap even for a full node_modules tree (macos only).
+    Clone `source` to `dest` via APFS copy-on-write (`clonefile(2)`) —
+    near-instant and cheap even for a full node_modules tree (macos only).
 
     CREATE-ONLY: `dest` should always be a fresh path, so an existing `dest`
     or a failed clone (non-APFS volume) raises rather than silently falling
@@ -54,6 +61,8 @@ def _cow_copy(source: Path, dest: Path) -> Path:
     WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         raise WorkspaceExists(str(dest))
-    if subprocess.run(["cp", "-c", "-R", str(source), str(dest)]).returncode != 0:
-        raise CopyUnavailable(f"{dest} is likely not on an APFS volume")
+    if _libc.clonefile(bytes(source), bytes(dest), 0) != 0:
+        reason = os.strerror(ctypes.get_errno())
+        shutil.rmtree(dest, ignore_errors=True)  # discard any half-cloned tree
+        raise CopyUnavailable(f"{dest}: {reason}")
     return dest
