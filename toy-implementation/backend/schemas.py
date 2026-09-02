@@ -70,7 +70,6 @@ class AddResponse(BaseModel):
     """What /core/add hands back: one entry per request, in the order sent."""
 
     features: list[QueuedFeature]
-    status: str
 
 
 class RefineBody(BaseModel):

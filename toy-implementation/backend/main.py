@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import db
 import preview
 import schemas
-from core import pipelines, statuses
+from core import pipelines
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -91,8 +91,7 @@ def add(body: schemas.AddBody) -> schemas.AddResponse:
                 feature_id=feature_id, feature_request=feature_request
             )
             for feature_id, feature_request in reserved
-        ],
-        status=statuses.QUEUED,
+        ]
     )
 
 
@@ -106,7 +105,7 @@ def refine(body: schemas.RefineBody) -> dict:
     if db.claim_for_refine(body.feature_id) is None:
         raise HTTPException(409, "feature is not in a refinable state")
     _FEATURE_POOL.submit(pipelines.run_refine, body.feature_id, body.user_request)
-    return {"feature_id": body.feature_id, "status": statuses.QUEUED}
+    return {"feature_id": body.feature_id}
 
 
 @app.get("/features")
