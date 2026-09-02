@@ -10,8 +10,9 @@ beats cleverness.
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from core import statuses
+from core import errors, statuses
 
 
 # The database lives next to this file, under data/.
@@ -21,48 +22,71 @@ DB_PATH = Path(__file__).parent / "data" / "app.db"
 # --- storage ----------------------------------------------------------------
 
 
-def connect() -> sqlite3.Connection:
-    """Open a connection with row access by column name."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+@contextmanager
+def _session(*, write: bool = False):
+    """
+    One connection, one transaction, always closed — and the single place a
+    storage failure becomes an AppError.
+    """
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)  # 5s busy_timeout by default
+        conn.row_factory = sqlite3.Row
+    except (OSError, sqlite3.Error) as exc:
+        raise errors.DatabaseUnavailable(f"{type(exc).__name__}: {exc}") from exc
+
+    try:
+        if write:
+            conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.commit()
+    except sqlite3.Error as exc:
+        conn.rollback()
+        raise errors.DatabaseError(f"{type(exc).__name__}: {exc}") from exc
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
-    """Create the features table if needed, then apply lightweight migrations."""
-    conn = connect()
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS features (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            parent_id      INTEGER,                       -- set for nested / refinement lineage
-            code_folder_name TEXT NOT NULL,               -- the CoW workspace folder name
-            feature        TEXT NOT NULL,                 -- the original (possibly rough) feature request
-            file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}, deterministic
-            summary        TEXT NOT NULL DEFAULT '{}',     -- JSON: FeatureSummary (AI human-readable layer)
-            refinements    TEXT NOT NULL DEFAULT '[]',    -- JSON: [{refinement_id, user_request, file_changes, summary}]
-            status         TEXT NOT NULL DEFAULT 'initializing',
-            progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
-            codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
-            is_dirty       INTEGER NOT NULL DEFAULT 0,    -- the workspace has been edited; never goes back to 0
-            created_at     REAL NOT NULL
-        )
-        """
-    )
-    conn.commit()
+    """
+    Enable WAL, create the features table if needed, then apply lightweight
+    migrations.
+    """
+    with _session() as conn:
+        # WAL lives in the database file, so it is set once here rather than per connection
+        mode = conn.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+        if mode != "wal":
+            raise errors.DatabaseError(
+                f"could not enable WAL; journal_mode is {mode!r}"
+            )
 
-    # Migration: add columns that older databases may be missing.
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(features)")}
-    if "codex_session_id" not in existing:
-        conn.execute("ALTER TABLE features ADD COLUMN codex_session_id TEXT")
-        conn.commit()
-    if "is_dirty" not in existing:
         conn.execute(
-            "ALTER TABLE features ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"
+            """
+            CREATE TABLE IF NOT EXISTS features (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_id      INTEGER,                       -- set for nested / refinement lineage
+                code_folder_name TEXT NOT NULL,               -- the CoW workspace folder name
+                feature        TEXT NOT NULL,                 -- the original (possibly rough) feature request
+                file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}, deterministic
+                summary        TEXT NOT NULL DEFAULT '{}',     -- JSON: FeatureSummary (AI human-readable layer)
+                refinements    TEXT NOT NULL DEFAULT '[]',    -- JSON: [{refinement_id, user_request, file_changes, summary}]
+                status         TEXT NOT NULL DEFAULT 'initializing',
+                progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
+                codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
+                is_dirty       INTEGER NOT NULL DEFAULT 0,    -- the workspace has been edited; never goes back to 0
+                created_at     REAL NOT NULL
+            )
+            """
         )
-        conn.commit()
-    conn.close()
+
+        # Migration: add columns that older databases may be missing.
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(features)")}
+        if "codex_session_id" not in existing:
+            conn.execute("ALTER TABLE features ADD COLUMN codex_session_id TEXT")
+        if "is_dirty" not in existing:
+            conn.execute(
+                "ALTER TABLE features ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"
+            )
 
 
 # --- core / features  ---------------------------------------------------------------
@@ -75,22 +99,20 @@ def create_feature(parent_id: int | None = None) -> int:
     `code_folder_name` is left empty for whoever clones the workspace to fill
     in, because the folder is named after the id this insert is what creates.
     """
-    conn = connect()
-    cur = conn.execute(
-        """
-        INSERT INTO features (parent_id, code_folder_name, feature, status, created_at)
-        VALUES (:parent_id, '', '', :status, :created_at)
-        """,
-        {
-            "parent_id": parent_id,
-            "status": statuses.INITIALIZING,
-            "created_at": time.time(),
-        },
-    )
-    conn.commit()
-    new_id = cur.lastrowid
-    conn.close()
-    return new_id
+    with _session() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO features
+                (parent_id, code_folder_name, feature, status, created_at)
+            VALUES (:parent_id, '', '', :status, :created_at)
+            """,
+            {
+                "parent_id": parent_id,
+                "status": statuses.INITIALIZING,
+                "created_at": time.time(),
+            },
+        )
+        return cur.lastrowid
 
 
 def reserve_features(
@@ -113,20 +135,12 @@ def reserve_features(
     if not feature_requests:
         return []
 
-    conn = connect()
-
-    # BEGIN IMMEDIATE is what buys it back: takes the write lock before the
-    # select, so a second caller waits here rather than reading rows this one is
-    # about to take. Removing this line reintroduces double claims.
-    conn.execute("BEGIN IMMEDIATE")
-
-    # Claim what we can, create fresh rows for the rest, return in order
-    claimed = _claim_ready(conn, feature_requests, parent_id)
-    uncovered = feature_requests[len(claimed) :]
-    created = _create_queued(conn, uncovered, parent_id)
-
-    conn.commit()
-    conn.close()
+    # write=True enables immediate True which blocks other writers in parallel until complete
+    with _session(write=True) as conn:
+        # Claim what we can, create fresh rows for the rest, return in order
+        claimed = _claim_ready(conn, feature_requests, parent_id)
+        uncovered = feature_requests[len(claimed) :]
+        created = _create_queued(conn, uncovered, parent_id)
     return claimed + created
 
 
@@ -215,24 +229,22 @@ def claim_for_refine(feature_id: int) -> int | None:
 
     A failed feature is refinable, which is how a failed run gets retried
     """
-    conn = connect()
-    row = conn.execute(
-        """
-        UPDATE features SET status = :taken, progress = ''
-        WHERE id = :feature_id
-          AND status IN (:completed, :failed)
-          AND code_folder_name != ''
-        RETURNING id
-        """,
-        {
-            "taken": statuses.QUEUED,
-            "feature_id": feature_id,
-            "completed": statuses.COMPLETED,
-            "failed": statuses.FAILED,
-        },
-    ).fetchone()
-    conn.commit()
-    conn.close()
+    with _session() as conn:
+        row = conn.execute(
+            """
+            UPDATE features SET status = :taken, progress = ''
+            WHERE id = :feature_id
+              AND status IN (:completed, :failed)
+              AND code_folder_name != ''
+            RETURNING id
+            """,
+            {
+                "taken": statuses.QUEUED,
+                "feature_id": feature_id,
+                "completed": statuses.COMPLETED,
+                "failed": statuses.FAILED,
+            },
+        ).fetchone()
     return row["id"] if row else None
 
 
@@ -248,13 +260,11 @@ def update_feature(feature_id: int, **fields) -> None:
             fields[col] = json.dumps(fields[col])
 
     assignments = ", ".join(f"{key} = :{key}" for key in fields)
-    conn = connect()
-    conn.execute(
-        f"UPDATE features SET {assignments} WHERE id = :feature_id",
-        {**fields, "feature_id": feature_id},
-    )
-    conn.commit()
-    conn.close()
+    with _session() as conn:
+        conn.execute(
+            f"UPDATE features SET {assignments} WHERE id = :feature_id",
+            {**fields, "feature_id": feature_id},
+        )
 
 
 def set_status(feature_id: int, status: str, progress: str) -> None:
@@ -263,18 +273,19 @@ def set_status(feature_id: int, status: str, progress: str) -> None:
 
 
 def get_feature(feature_id: int) -> dict | None:
-    conn = connect()
-    row = conn.execute(
-        "SELECT * FROM features WHERE id = :feature_id", {"feature_id": feature_id}
-    ).fetchone()
-    conn.close()
+    with _session() as conn:
+        row = conn.execute(
+            "SELECT * FROM features WHERE id = :feature_id",
+            {"feature_id": feature_id},
+        ).fetchone()
     return _row_to_dict(row) if row else None
 
 
 def list_features() -> list[dict]:
-    conn = connect()
-    rows = conn.execute("SELECT * FROM features ORDER BY created_at DESC").fetchall()
-    conn.close()
+    with _session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM features ORDER BY created_at DESC"
+        ).fetchall()
     return [_row_to_dict(r) for r in rows]
 
 

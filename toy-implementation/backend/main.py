@@ -20,13 +20,14 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import db
 import preview
 import schemas
-from core import pipelines
+from core import errors, pipelines
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -62,6 +63,16 @@ def shutdown() -> None:
     preview.stop_all()  # don't leave orphan dev servers running
     _FEATURE_POOL.shutdown(wait=False, cancel_futures=True)
     _PRELOAD_POOL.shutdown(wait=False, cancel_futures=True)
+
+
+@app.exception_handler(errors.DatabaseUnavailable)
+def database_unavailable(
+    request: Request, exc: errors.DatabaseUnavailable
+) -> JSONResponse:
+    """
+    Could not reach the database at all, raise this significant exception
+    """
+    return JSONResponse(status_code=503, content={"detail": exc.status_line()})
 
 
 # --- endpoints --------------------------------------------------------------
@@ -109,25 +120,21 @@ def refine(body: schemas.RefineBody) -> dict:
 
 
 @app.get("/features")
-def list_all() -> list[dict]:
-    return db.list_features()
+def list_all() -> list[schemas.FeatureResponse]:
+    return [schemas.FeatureResponse(**feature) for feature in db.list_features()]
 
 
 @app.get("/features/{feature_id}")
-def detail(feature_id: int) -> dict:
+def detail(feature_id: int) -> schemas.FeatureResponse:
     feature = db.get_feature(feature_id)
-    if not feature:
+    if feature is None:
         raise HTTPException(404, "feature not found")
-    return feature
+    return schemas.FeatureResponse(**feature)
 
 
 @app.get("/features/{feature_id}/status")
-def status(feature_id: int) -> dict:
+def status(feature_id: int) -> schemas.FeatureStatusResponse:
     feature = db.get_feature(feature_id)
-    if not feature:
+    if feature is None:
         raise HTTPException(404, "feature not found")
-    return {
-        "id": feature["id"],
-        "status": feature["status"],
-        "progress": feature["progress"],
-    }
+    return schemas.FeatureStatusResponse(**feature)

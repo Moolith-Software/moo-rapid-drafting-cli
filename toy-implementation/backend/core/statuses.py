@@ -6,9 +6,9 @@ The high level states a feature moves through for core functionality
     add (cold)   queued -> initializing -> building -> completed
     refinement   completed|failed -> queued -> refining -> completed
 
-`queued` is written in the fastapi endpoint, so a feature is claimed the moment
-someone is waiting on it rather than when a worker picks it up; every state
-after it is written by the worker doing that step.
+a feature is 'claimed' the moment someone is waiting on it rather than
+when a worker picks it up; every state after it is written by the worker
+doing that step.
 """
 
 INITIALIZING = "initializing"  # row exists; its environment is being built

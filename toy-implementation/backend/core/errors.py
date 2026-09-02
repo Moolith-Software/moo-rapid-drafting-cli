@@ -8,6 +8,7 @@ never have to stringify a raw exception.
 
     1xxx  workspace + setup      — the feature and its workspace
     2xxx  AI integration     — configuring it, running it, waiting for it, and output issues
+    3xxx  database            — reading or writing the database
     9xxx  unknown    — anything we did not anticipate
 
 General title and error code, with granular information inside the message, passed from the
@@ -98,6 +99,16 @@ class NoChanges(AppError):
 class UnknownAIError(AppError):  # last in the band, the way 9000 is last overall
     code = 2999
     title = "Unexpected AI error"
+
+
+class DatabaseError(AppError):
+    code = 3000
+    title = "Database error"
+
+
+class DatabaseUnavailable(DatabaseError):  # could not open it at all
+    code = 3001
+    title = "Database unavailable"
 
 
 def wrap(exc: Exception) -> AppError:

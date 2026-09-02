@@ -75,3 +75,30 @@ class AddResponse(BaseModel):
 class RefineBody(BaseModel):
     feature_id: int = Field(ge=1)
     user_request: Request
+
+
+class FeatureResponse(BaseModel):
+    """
+    A feature as the API returns it: every column, in table order
+    """
+
+    id: int
+    parent_id: int | None
+    code_folder_name: str
+    feature: str
+    file_changes: list[dict]
+    summary: dict
+    refinements: list[dict]
+    status: str
+    progress: str
+    codex_session_id: str | None
+    is_dirty: bool
+    created_at: float
+
+
+class FeatureStatusResponse(BaseModel):
+    """Just the fields from the db row that the frontend actually polls"""
+
+    id: int
+    status: str
+    progress: str
