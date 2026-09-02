@@ -78,11 +78,20 @@ def database_unavailable(
 # --- endpoints --------------------------------------------------------------
 
 
+def _check_parent(parent_id: int | None) -> None:
+    """
+    A child clones its parent's workspace, so the parent row has to exist
+    """
+    if parent_id is not None and db.get_feature(parent_id) is None:
+        raise HTTPException(404, f"parent feature {parent_id} not found")
+
+
 @app.post("/core/preload_environment", status_code=202)
 def preload_environment(body: schemas.PreloadEnvironmentBody) -> dict:
     """
     Build environments ahead of the requests that will use them.
     """
+    _check_parent(body.parent_id)
     for _ in range(body.count):
         _PRELOAD_POOL.submit(pipelines.preload_environment, body.parent_id)
     return {"queued": body.count}
@@ -93,6 +102,7 @@ def add(body: schemas.AddBody) -> schemas.AddResponse:
     """
     Build a feature, or a batch of them.
     """
+    _check_parent(body.parent_id)
     reserved = db.reserve_features(body.feature_requests, body.parent_id)
     for feature_id, _ in reserved:
         _FEATURE_POOL.submit(pipelines.run_add, feature_id)

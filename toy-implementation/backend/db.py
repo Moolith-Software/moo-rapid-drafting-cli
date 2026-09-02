@@ -32,6 +32,9 @@ def _session(*, write: bool = False):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(DB_PATH)  # 5s busy_timeout by default
         conn.row_factory = sqlite3.Row
+        # Off by default, and silently ignored once a transaction is open, so it
+        # belongs here and not next to the WAL pragma in init_db.
+        conn.execute("PRAGMA foreign_keys = ON")
     except (OSError, sqlite3.Error) as exc:
         raise errors.DatabaseUnavailable(f"{type(exc).__name__}: {exc}") from exc
 
@@ -51,6 +54,10 @@ def init_db() -> None:
     """
     Enable WAL, create the features table if needed, then apply lightweight
     migrations.
+    TODO:  Nothing deletes features yet. When something does, a parent's
+    children have to go with it — but a feature is more than its row: it
+    owns a workspace folder and a preview server on port, neither of which a
+    SQL cascade can reach. That needs a real teardown path, not just ON DELETE CASCADE.
     """
     with _session() as conn:
         # WAL lives in the database file, so it is set once here rather than per connection
@@ -64,7 +71,7 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS features (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                parent_id      INTEGER,                       -- set for nested / refinement lineage
+                parent_id      INTEGER REFERENCES features(id),  -- nested / refinement lineage
                 code_folder_name TEXT NOT NULL,               -- the CoW workspace folder name
                 feature        TEXT NOT NULL,                 -- the original (possibly rough) feature request
                 file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}, deterministic
