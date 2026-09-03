@@ -15,10 +15,10 @@ function below starts from a row that already exists.
 Both pipelines run on a background thread, so the HTTP request returns straight
 away and the frontend polls for status.
 
-A feature is modelled two ways at once, and they stay in step:
+Lineage is a code relationship, not a conversational one:
 
-    code    a child clones its parent's workspace
-    session a child forks its parent's session; a refinement resumes its own
+    code    a child clones its parent's workspace, so it starts from that code
+    session a child opens a fresh session; only a refinement resumes its own
 """
 
 import time

@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 import db
 import preview
 import schemas
-from core import errors, pipelines
+from core import errors, pipelines, statuses
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -80,10 +80,17 @@ def database_unavailable(
 
 def _check_parent(parent_id: int | None) -> None:
     """
-    A child clones its parent's workspace, so the parent row has to exist
+    A child clones its parent's workspace, parent has to be the right state
     """
-    if parent_id is not None and db.get_feature(parent_id) is None:
+    if parent_id is None:
+        return
+    parent = db.get_feature(parent_id)
+    if parent is None:
         raise HTTPException(404, f"parent feature {parent_id} not found")
+    if parent["status"] != statuses.COMPLETED:
+        raise HTTPException(
+            409, f"parent feature {parent_id} is {parent['status']}, not completed"
+        )
 
 
 @app.post("/core/preload_environment", status_code=202)
