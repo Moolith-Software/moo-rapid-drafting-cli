@@ -288,6 +288,24 @@ def get_feature(feature_id: int) -> dict | None:
     return _row_to_dict(row) if row else None
 
 
+def count_children(feature_id: int) -> int:
+    """
+    How many features were branched off a parent?
+    Used to "lock" a parent from refinement after it has children.
+    """
+    with _session() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS branched FROM features
+            WHERE parent_id = :feature_id
+              AND feature != ''
+              AND NOT (status = :failed AND code_folder_name = '')
+            """,
+            {"feature_id": feature_id, "failed": statuses.FAILED},
+        ).fetchone()
+    return row["branched"]
+
+
 def list_features() -> list[dict]:
     with _session() as conn:
         rows = conn.execute(

@@ -25,9 +25,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import db
+import guards
 import preview
 import schemas
-from core import errors, pipelines, statuses
+from core import errors, pipelines
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -78,27 +79,12 @@ def database_unavailable(
 # --- endpoints --------------------------------------------------------------
 
 
-def _check_parent(parent_id: int | None) -> None:
-    """
-    A child clones its parent's workspace, parent has to be the right state
-    """
-    if parent_id is None:
-        return
-    parent = db.get_feature(parent_id)
-    if parent is None:
-        raise HTTPException(404, f"parent feature {parent_id} not found")
-    if parent["status"] != statuses.COMPLETED:
-        raise HTTPException(
-            409, f"parent feature {parent_id} is {parent['status']}, not completed"
-        )
-
-
 @app.post("/core/preload_environment", status_code=202)
 def preload_environment(body: schemas.PreloadEnvironmentBody) -> dict:
     """
     Build environments ahead of the requests that will use them.
     """
-    _check_parent(body.parent_id)
+    guards.check_parent(body.parent_id)
     for _ in range(body.count):
         _PRELOAD_POOL.submit(pipelines.preload_environment, body.parent_id)
     return {"queued": body.count}
@@ -109,7 +95,7 @@ def add(body: schemas.AddBody) -> schemas.AddResponse:
     """
     Build a feature, or a batch of them.
     """
-    _check_parent(body.parent_id)
+    guards.check_parent(body.parent_id)
     reserved = db.reserve_features(body.feature_requests, body.parent_id)
     for feature_id, _ in reserved:
         _FEATURE_POOL.submit(pipelines.run_add, feature_id)
@@ -130,6 +116,7 @@ def refine(body: schemas.RefineBody) -> dict:
     """
     if not db.get_feature(body.feature_id):
         raise HTTPException(404, "feature not found")
+    guards.check_no_children(body.feature_id)
     if db.claim_for_refine(body.feature_id) is None:
         raise HTTPException(409, "feature is not in a refinable state")
     _FEATURE_POOL.submit(pipelines.run_refine, body.feature_id, body.user_request)
