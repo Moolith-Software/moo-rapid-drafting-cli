@@ -92,7 +92,8 @@ class FeatureResponse(BaseModel):
     status: str
     progress: str
     codex_session_id: str | None
-    is_dirty: bool
+    workspace_version: int
+    cloned_from_version: int | None
     created_at: float
 
 

@@ -65,7 +65,11 @@ def build_environment(feature_id: int) -> dict | None:
 
         parent = db.get_feature(row["parent_id"]) if row["parent_id"] else None
         env = environments.prepare_workspace(feature_id, parent)
-        db.update_feature(feature_id, code_folder_name=env.folder)
+        db.update_feature(
+            feature_id,
+            code_folder_name=env.folder,
+            cloned_from_version=parent["workspace_version"] if parent else None,
+        )
 
         # Read-only, so it cannot edit anything and leave the environment dirty, caching only
         result = feature_ai.prewarm_ai_session(env.workspace)
@@ -83,7 +87,6 @@ def build_environment(feature_id: int) -> dict | None:
     except Exception as exc:
         db.update_feature(
             feature_id,
-            is_dirty=False,  # read-only priming cannot have edited anything
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )
@@ -109,6 +112,7 @@ def run_add(feature_id: int) -> None:
     try:
         workspace = workspaces.path_for(row["code_folder_name"])
 
+        db.bump_workspace_version(feature_id)
         db.set_status(feature_id, statuses.BUILDING, "Implementing the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.add_feature(
@@ -130,19 +134,13 @@ def run_add(feature_id: int) -> None:
             file_changes=file_changes,
             summary=result.summary,
             codex_session_id=result.session_id,
-            is_dirty=True,
             status=statuses.COMPLETED,
             progress="Done.",
         )
 
     except Exception as exc:
-        try:
-            edited = bool(changes.diff_snapshots(before, changes.snapshot(workspace)))
-        except Exception:
-            edited = False
         db.update_feature(
             feature_id,
-            is_dirty=edited,
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )
@@ -163,6 +161,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
         workspace = workspaces.path_for(row["code_folder_name"])
         recap = _recap(row)
 
+        db.bump_workspace_version(feature_id)
         db.set_status(feature_id, statuses.REFINING, "Refining the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.refine_feature(
@@ -183,7 +182,6 @@ def run_refine(feature_id: int, user_request: str) -> None:
             feature_id,
             refinements=_append_refinement(row, user_request, file_changes, result),
             codex_session_id=result.session_id,
-            is_dirty=True,
             status=statuses.COMPLETED,
             progress="Done.",
         )
@@ -191,7 +189,6 @@ def run_refine(feature_id: int, user_request: str) -> None:
     except Exception as exc:
         db.update_feature(
             feature_id,
-            is_dirty=True,  # assumed to be dirty since it uses the same workspace as run_add
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )

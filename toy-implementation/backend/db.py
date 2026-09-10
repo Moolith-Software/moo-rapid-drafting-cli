@@ -80,7 +80,8 @@ def init_db() -> None:
                 status         TEXT NOT NULL DEFAULT 'initializing',
                 progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
                 codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
-                is_dirty       INTEGER NOT NULL DEFAULT 0,    -- the workspace has been edited; never goes back to 0
+                workspace_version INTEGER NOT NULL DEFAULT 0, -- turns that have written to this workspace
+                cloned_from_version INTEGER,                  -- the parent's workspace_version this was cloned from
                 created_at     REAL NOT NULL
             )
             """
@@ -90,10 +91,6 @@ def init_db() -> None:
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(features)")}
         if "codex_session_id" not in existing:
             conn.execute("ALTER TABLE features ADD COLUMN codex_session_id TEXT")
-        if "is_dirty" not in existing:
-            conn.execute(
-                "ALTER TABLE features ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"
-            )
 
 
 # --- core / features  ---------------------------------------------------------------
@@ -157,27 +154,41 @@ def _claim_ready(
     """
     Match preloaded environments that are available to feature requests coming in.
 
-    `parent_id IS :parent_id` matches null-safely, so a request for a child only
-    ever gets an environment cloned from that same parent.
+    Two null-safe `IS` comparisons decide what is usable. `parent_id` keeps a
+    request for a child on environments cloned from that same parent, and
+    `cloned_from_version` keeps it matching to the same version as the parent —
+    a refinement bumps the parent past every clone taken before it.
 
     Oldest first, even though the AI provider's cache is only guaranteed for 30
     minutes after its last write or reuse. Newest first would leave the eldest
     workspaces never picked up, and there is no reaper yet to prune workspaces
     or preview environments older than 30 minutes.
     """
+    parent_version = None
+    if parent_id is not None:
+        parent_row = conn.execute(
+            "SELECT workspace_version FROM features WHERE id = :parent_id",
+            {"parent_id": parent_id},
+        ).fetchone()
+        if parent_row is None:
+            return []  # no parent to be current with, so nothing is claimable
+        parent_version = parent_row["workspace_version"]
+
     ready = [
         row["id"]
         for row in conn.execute(
             """
             SELECT id FROM features
-            WHERE status = :wanted AND feature = '' AND is_dirty = 0
+            WHERE status = :wanted AND feature = '' AND workspace_version = 0
               AND parent_id IS :parent_id
+              AND cloned_from_version IS :parent_version
             ORDER BY created_at
             LIMIT :count
             """,
             {
                 "wanted": statuses.READY,
                 "parent_id": parent_id,
+                "parent_version": parent_version,
                 "count": len(feature_requests),
             },
         )
@@ -253,6 +264,20 @@ def claim_for_refine(feature_id: int) -> int | None:
             },
         ).fetchone()
     return row["id"] if row else None
+
+
+def bump_workspace_version(feature_id: int) -> None:
+    """
+    Record that a turn is about to write to this feature's workspace.
+    """
+    with _session() as conn:
+        conn.execute(
+            """
+            UPDATE features SET workspace_version = workspace_version + 1
+            WHERE id = :feature_id
+            """,
+            {"feature_id": feature_id},
+        )
 
 
 def update_feature(feature_id: int, **fields) -> None:
@@ -342,5 +367,4 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     data["file_changes"] = json.loads(data["file_changes"])
     data["refinements"] = json.loads(data["refinements"])
     data["summary"] = _normalize_summary(data["summary"])
-    data["is_dirty"] = bool(data["is_dirty"])
     return data
