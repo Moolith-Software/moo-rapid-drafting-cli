@@ -23,7 +23,7 @@ def prepare_workspace(feature_id: int, parent: dict | None = None) -> Environmen
     """
     Give a feature its own copy of the code.
 
-    A top-level feature clones the pristine base app. A child clones its parent's
+    A top-level feature clones the base. A child clones its parent's
     workspace and nothing else: it inherits the code, then starts its own
     conversation with the AI provider about it. Only a refinement continues
     an existing agent turn/conversation thread.

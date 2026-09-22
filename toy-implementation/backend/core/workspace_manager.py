@@ -1,25 +1,27 @@
 """
-Per-feature workspace folders, each a CoW clone (`clonefile(2)`, APFS-only)
-of base/ or a parent feature. Owns the workspaces dir, folder naming, and
-cloning — nothing about features, the database, or the AI.
+Per-feature workspaces, each a copy-on-write clone of the base image or of a
+parent feature.
+Owns the workspaces dir, folder naming, and cloning only, not features,
+the database, or the AI.
 """
 
-import ctypes
-import os
-import shutil
 import uuid
 from pathlib import Path
 
-from .errors import CopyUnavailable, WorkspaceExists
+from . import cloning
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]  # this file lives in core/
-BASE_DIR = BACKEND_DIR.parent / "base"  # the pristine seed codebase
-WORKSPACES_DIR = BACKEND_DIR / "workspaces"  # per-feature CoW clones live here
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+SOURCE_APP_DIR = BACKEND_DIR.parent / "base"  # the app build_base() copies in
+WORKSPACES_DIR = BACKEND_DIR / "workspaces"
 
-# clonefile(2) clones a whole tree in one syscall, and has no stdlib wrapper.
-_libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
-_libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
-_libc.clonefile.restype = ctypes.c_int
+# Chosen once, by platform. Raises here rather than at the first clone, so an
+# unsupported host fails at startup with a reason instead of mid-feature.
+_driver = cloning.get_driver(WORKSPACES_DIR)
+
+
+def driver_name() -> str:
+    """Which driver is doing the copying — for logs and benchmarks."""
+    return _driver.name
 
 
 def new_folder_name(feature_id: int) -> str:
@@ -30,39 +32,62 @@ def new_folder_name(feature_id: int) -> str:
     return f"feature-{feature_id}-{uuid.uuid4().hex[:8]}"
 
 
-def path_for(folder_name: str) -> Path:
-    """Absolute path of a workspace folder."""
-    return WORKSPACES_DIR / folder_name
+""" Setup """
+
+
+def build_base() -> None:
+    """
+    Build the base from base/, unless it is built already. The only slow call.
+
+    Nothing calls this yet: the add-project endpoint will, once per project,
+    passing that project's own source folder rather than SOURCE_APP_DIR.
+    clone_base() expects the base to exist, and cloning is O(1) precisely
+    because this copy happened once.
+    """
+    _driver.build_base(SOURCE_APP_DIR)
+
+
+def sweep() -> int:
+    """
+    Close workspaces a previous run left open, and return how many.
+
+    A killed process releases nothing, so its workspaces stay open and hold
+    memory. Call once at startup.
+    """
+    return _driver.sweep()
 
 
 """ Core cloning functions """
 
 
 def clone_base(folder_name: str) -> Path:
-    """CoW-clone the pristine base/ into workspaces/<folder_name>."""
-    return _cow_copy(BASE_DIR, path_for(folder_name))
+    """CoW-clone the base into a new branch named <folder_name>, opened."""
+    return _driver.clone_base(folder_name)
 
 
 def clone_from(source_folder: str, folder_name: str) -> Path:
     """CoW-clone an existing workspace (e.g. a parent feature) into a new one."""
-    return _cow_copy(path_for(source_folder), path_for(folder_name))
+    return _driver.clone_from(source_folder, folder_name)
 
 
-def _cow_copy(source: Path, dest: Path) -> Path:
+""" Using a workspace """
+
+
+def open_workspace(folder_name: str) -> Path:
     """
-    Clone `source` to `dest` via APFS copy-on-write (`clonefile(2)`) —
-    near-instant and cheap even for a full node_modules tree (macos only).
+    Make a workspace usable and return its path. Idempotent.
 
-    CREATE-ONLY: `dest` should always be a fresh path, so an existing `dest`
-    or a failed clone (non-APFS volume) raises rather than silently falling
-    back to a slow full copy.  Dest should not exist though already since we
-    are using uuid's in the folder.
+    On Linux this only checks; on macOS it mounts.
     """
-    WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        raise WorkspaceExists(str(dest))
-    if _libc.clonefile(bytes(source), bytes(dest), 0) != 0:
-        reason = os.strerror(ctypes.get_errno())
-        shutil.rmtree(dest, ignore_errors=True)  # discard any half-cloned tree
-        raise CopyUnavailable(f"{dest}: {reason}")
-    return dest
+    return _driver.open(folder_name)
+
+
+def close_workspace(folder_name: str) -> None:
+    """
+    Release a workspace. The workspace and its contents survive.
+
+    Only the preview calls this, because the dev server outlives the turn that
+    created it and is the last thing using the workspace. A turn deliberately
+    does not close on its way out — it would unmount the volume Vite is serving.
+    """
+    _driver.close(folder_name)

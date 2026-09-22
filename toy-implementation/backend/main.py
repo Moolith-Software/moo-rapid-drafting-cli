@@ -29,6 +29,7 @@ import guards
 import preview
 import schemas
 from core import errors, pipelines
+from core import workspace_manager as workspaces
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -57,6 +58,16 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     db.init_db()
+
+    # clean any leftover open workspaces from last session
+    closed = workspaces.sweep()
+    if closed:
+        print(
+            f"[workspaces] closed {closed} left open by a previous run",
+            flush=True,
+        )
+    # Bases are built per project, by the add-project endpoint — not built yet.
+    print(f"[workspaces] driver: {workspaces.driver_name()}", flush=True)
 
 
 @app.on_event("shutdown")

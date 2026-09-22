@@ -73,7 +73,7 @@ def build_environment(feature_id: int) -> dict | None:
 
         # Read-only, so it cannot edit anything and leave the environment dirty, caching only
         result = feature_ai.prewarm_ai_session(env.workspace)
-        preview.start_preview(f"feature-{feature_id}", env.workspace)
+        preview.start_preview(f"feature-{feature_id}", env.workspace, env.folder)
 
         db.update_feature(feature_id, codex_session_id=result.session_id)
         if not row["feature"]:  # no request attached, so it joins the warm pool
@@ -110,7 +110,7 @@ def run_add(feature_id: int) -> None:
             return
 
     try:
-        workspace = workspaces.path_for(row["code_folder_name"])
+        workspace = workspaces.open_workspace(row["code_folder_name"])
 
         db.bump_workspace_version(feature_id)
         db.set_status(feature_id, statuses.BUILDING, "Implementing the feature…")
@@ -158,7 +158,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
     """
     row = db.get_feature(feature_id)
     try:
-        workspace = workspaces.path_for(row["code_folder_name"])
+        workspace = workspaces.open_workspace(row["code_folder_name"])
         recap = _recap(row)
 
         db.bump_workspace_version(feature_id)
