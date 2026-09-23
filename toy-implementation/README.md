@@ -57,7 +57,7 @@ npm run dev
 
 Open http://localhost:5173, type a feature, and click **Run feature**.
 
-**Checks.** Formatting, lint, types, dead code and emdashes, the
+**Checks.** Formatting, lint, types, dead code and custom rules, the
 same five a push runs:
 
 ```bash
@@ -68,6 +68,13 @@ npm run fix:backend     # apply the fixable lint and formatting changes
 
 A `pre-push` hook runs `check:backend` automatically. The `npm install` in step
 3 installs it; `git push --no-verify` skips it.
+
+Custom rules are project conventions ruff cannot express, such as banning
+emdashes. They live in `backend/scripts/custom_rules.py`; add one by adding a
+line to its `RULES` table. Silence a single line with `noqa: <code>`, in
+whatever comment syntax that file uses, the same way you would silence ruff or
+vulture. Their `CR` prefix is listed in ruff's `lint.external` so ruff leaves
+those comments alone.
 
 ## Previewing a generated app
 
@@ -94,4 +101,6 @@ npm run dev
 | `progress`         | latest live status line (for polling)                          |
 | `created_at`       | unix timestamp                                                 |
 ```
+
+
 

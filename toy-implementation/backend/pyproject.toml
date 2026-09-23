@@ -59,11 +59,10 @@ select = [
 #   S603/S607 subprocess - inherent to the cloning drivers
 #   E501    line length - ruff format owns this
 
-# Vulture's codes (V101-V201) appear in `# noqa` comments in this codebase.
-# Without this, RUF102 calls them invalid rule codes and -- because that rule is
-# auto-fixable -- `fix:backend` would delete the suppressions and break the
-# dead-code check.
-external = ["V"]
+# Two other checkers write their codes in `# noqa` comments here: vulture's
+# V101-V201, and CR from scripts/custom_rules.py. Keep both prefixes. Without
+# them RUF102 calls the codes invalid and breaks the autofixing
+external = ["V", "CR"]
 
 # Only a bare `_` silences the unused-argument and unused-variable rules.
 # The default pattern also accepts `_foo`, which lets dead arguments survive by
