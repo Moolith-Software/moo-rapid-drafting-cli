@@ -3,7 +3,7 @@ The two feature pipelines: adding a feature, and refining one.
 
 This module is only the *order* of the steps. Each step lives elsewhere:
 
-    core.environments     get a runnable environment ready (its own copy of the code)
+    core.cloning          give it its own copy of the code
     core.ai.operations.features     ask the AI to build or refine it
     core.changes          work out what actually changed on disk
     repositories.features record status and results
@@ -26,7 +26,7 @@ import time
 import preview
 from repositories import features
 
-from . import changes, environments, errors, statuses
+from . import changes, errors, statuses
 from .ai.operations import features as feature_ai
 from .cloning import workspaces
 
@@ -64,16 +64,22 @@ def build_environment(feature_id: int) -> dict | None:
         )
 
         parent = features.get_feature(row["parent_id"]) if row["parent_id"] else None
-        env = environments.prepare_workspace(feature_id, parent)
+        folder = workspaces.new_folder_name(feature_id)
+        # A child starts from its parent's code, but not its conversation - the
+        # warm-up below opens a fresh session either way.
+        if parent:
+            workspace = workspaces.clone_from(parent["code_folder_name"], folder)
+        else:
+            workspace = workspaces.clone_base(folder)
         features.update_feature(
             feature_id,
-            code_folder_name=env.folder,
+            code_folder_name=folder,
             cloned_from_version=parent["workspace_version"] if parent else None,
         )
 
         # Read-only, so it cannot edit anything and leave the environment dirty, caching only
-        result = feature_ai.prewarm_ai_session(env.workspace)
-        preview.start_preview(f"feature-{feature_id}", env.workspace, env.folder)
+        result = feature_ai.prewarm_ai_session(workspace)
+        preview.start_preview(f"feature-{feature_id}", workspace, folder)
 
         features.update_feature(
             feature_id, harness_session_id=result.session_id, harness=result.harness
