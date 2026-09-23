@@ -1,5 +1,5 @@
 """
-The core of the tool — everything that actually builds a feature.
+The core of the tool - everything that actually builds a feature.
 
     pipelines.py          the pipelines: add a feature, refine a feature
     environments.py       readying a runnable environment (clone + provider session)

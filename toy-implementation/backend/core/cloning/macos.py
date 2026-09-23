@@ -1,5 +1,5 @@
 """
-macOS — every branch is its own sparse disk image.
+macOS - every branch is its own sparse disk image.
 
 Branching clones a single image file, however many files are inside it, and
 `hdiutil attach` mounts the clone as an ordinary folder.
@@ -110,7 +110,7 @@ class SparseImages(WorkspaceDriver):
 
     # --- Not built yet ---
 
-    def destroy(self, folder: str) -> None:  # noqa: V105 — required by the contract; nothing calls destroy() yet
+    def destroy(self, folder: str) -> None:  # noqa: V105 - required by the contract; nothing calls destroy() yet
         """
         TODO: unmount the branch, then delete its image.
 
@@ -153,7 +153,7 @@ class SparseImages(WorkspaceDriver):
         # parent whose turn has finished.
         subprocess.run(["sync"], check=False)
 
-        # Creates nothing when it fails, so there is nothing to clean up — and
+        # Creates nothing when it fails, so there is nothing to clean up - and
         # deleting `dest` here could delete someone else's branch.
         copy_on_write(source, dest)
         try:

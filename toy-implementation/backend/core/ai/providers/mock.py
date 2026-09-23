@@ -2,7 +2,7 @@
 A fake provider: no API calls, no cost.
 
 It makes a real (small) edit to the workspace, so change detection has something
-genuine to find and the whole pipeline — clone, turn, diff, summary, status — can
+genuine to find and the whole pipeline - clone, turn, diff, summary, status - can
 be exercised end to end offline.
 
 Set `simulate_timeout` to make it raise TurnTimeoutError instead, so the timeout path
@@ -54,7 +54,7 @@ class MockProvider(Provider):
         # Reuse whichever session we were given so resume/fork behave believably.
         session = session_id or fork_from or f"mock-{uuid.uuid4().hex[:8]}"
 
-        # A real edit, so snapshot/diff sees an actual change — unless the turn
+        # A real edit, so snapshot/diff sees an actual change - unless the turn
         # was told it may not write, which is what a warm-up turn asks for.
         if not read_only:
             note = Path(workspace) / NOTE_FILE

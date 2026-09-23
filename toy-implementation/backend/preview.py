@@ -1,5 +1,5 @@
 """
-Preview manager — the 'Setup preview / build tools' box from the diagram.
+Preview manager - the 'Setup preview / build tools' box from the diagram.
 
 Each workspace is a full CoW clone (node_modules and all), so previewing it is
 just `npm run dev` on its own port. This module starts one Vite dev server per
@@ -39,7 +39,7 @@ def _wait_ready(port: int, timeout: float = 40.0) -> bool:
     """
     Poll the port until the dev server accepts connections (or we give up).
     We connect to "localhost" (not "127.0.0.1") because Vite binds to IPv6 [::1]
-    by default — an IPv4-only probe would never see it.
+    by default - an IPv4-only probe would never see it.
     """
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -56,7 +56,7 @@ def start_preview(key: str, cwd: Path, folder: str | None = None) -> dict:
     Start (or reuse) a Vite dev server for `key` rooted at `cwd`. Returns {url, port}.
 
     `folder` is the workspace the server runs in. The dev server outlives the
-    turn that created it, so it is what keeps the workspace open — and what
+    turn that created it, so it is what keeps the workspace open - and what
     closes it on the way out.
     """
     existing = _servers.get(key)

@@ -27,7 +27,7 @@ DB_PATH = Path(__file__).parent / "data" / "app.db"
 @contextmanager
 def _session(*, write: bool = False) -> Iterator[sqlite3.Connection]:
     """
-    One connection, one transaction, always closed — and the single place a
+    One connection, one transaction, always closed - and the single place a
     storage failure becomes an AppError.
     """
     try:
@@ -57,7 +57,7 @@ def init_db() -> None:
     Enable WAL, create the features table if needed, then apply lightweight
     migrations.
     TODO:  Nothing deletes features yet. When something does, a parent's
-    children have to go with it — but a feature is more than its row: it
+    children have to go with it - but a feature is more than its row: it
     owns a workspace folder and a preview server on port, neither of which a
     SQL cascade can reach. That needs a real teardown path, not just ON DELETE CASCADE.
     """
@@ -158,7 +158,7 @@ def _claim_ready(
 
     Two null-safe `IS` comparisons decide what is usable. `parent_id` keeps a
     request for a child on environments cloned from that same parent, and
-    `cloned_from_version` keeps it matching to the same version as the parent —
+    `cloned_from_version` keeps it matching to the same version as the parent -
     a refinement bumps the parent past every clone taken before it.
 
     Oldest first, even though the AI provider's cache is only guaranteed for 30
@@ -245,7 +245,7 @@ def claim_for_refine(feature_id: int) -> int | None:
     Reserve a feature for refinement, or None when it cannot be refined.
 
     Checks and transitions in one statement, so of two refine requests for the
-    same feature only one ever starts a turn — the other sees None.
+    same feature only one ever starts a turn - the other sees None.
 
     A failed feature is refinable, which is how a failed run gets retried
     """

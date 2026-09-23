@@ -6,10 +6,10 @@ short `title`, plus a `message` from the raise site saying which path, which id,
 which reply. Callers catch AppError, store `status_line()` on the feature, and
 never have to stringify a raw exception.
 
-    1xxx  workspace + setup      — the feature and its workspace
-    2xxx  AI integration     — configuring it, running it, waiting for it, and output issues
-    3xxx  database            — reading or writing the database
-    9xxx  unknown    — anything we did not anticipate
+    1xxx  workspace + setup      - the feature and its workspace
+    2xxx  AI integration     - configuring it, running it, waiting for it, and output issues
+    3xxx  database            - reading or writing the database
+    9xxx  unknown    - anything we did not anticipate
 
 General title and error code, with granular information inside the message, passed from the
 provider.  Every AI provider must map/flatten its exceptions to these error codes.
@@ -27,7 +27,7 @@ class AppError(Exception):
     """
     Base for every failure.
 
-    The class supplies the fixed half — `code` and `title`. The raise site
+    The class supplies the fixed half - `code` and `title`. The raise site
     supplies the variable half, `message`.
     """
 

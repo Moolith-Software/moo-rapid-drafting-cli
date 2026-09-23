@@ -1,9 +1,9 @@
 """
-Linux — one btrfs image, mounted once; every workspace is a subvolume inside it.
+Linux - one btrfs image, mounted once; every workspace is a subvolume inside it.
 
 Rather than one image per workspace as on macOS, Linux gets a *single* store
 image containing a copy-on-write filesystem, loop-mounted once at startup.
-Branching is then `BTRFS_IOC_SNAP_CREATE_V2` — a snapshot of one B-tree root,
+Branching is then `BTRFS_IOC_SNAP_CREATE_V2` - a snapshot of one B-tree root,
 constant time and constant metadata no matter how many files are inside.
 
     workspaces/
@@ -15,7 +15,7 @@ constant time and constant metadata no matter how many files are inside.
 Two things fall out of putting the filesystem inside an image rather than
 relying on the host's:
 
-    the host filesystem stops mattering    ext4, xfs, zfs underneath — it is
+    the host filesystem stops mattering    ext4, xfs, zfs underneath - it is
                                            just a file. Debian and Ubuntu
                                            default to ext4, which has no
                                            reflink, so this is what makes them
@@ -28,16 +28,16 @@ relying on the host's:
                                            is free.
 
 The image is sparse and sized generously up front, so it occupies only what has
-been written and grows on its own as clones diverge — no resizing step.
+been written and grows on its own as clones diverge - no resizing step.
 
 WHAT THIS STILL NEEDS:
 
     root, once      loop-mounting requires CAP_SYS_ADMIN. Once the store is
-                    mounted, everything else — snapshot, read, write — is
+                    mounted, everything else - snapshot, read, write - is
                     unprivileged.
 
     btrfs-progs     `mkfs.btrfs` formats the store on first run, and is the
-                    only thing that needs it — snapshots go through ioctls
+                    only thing that needs it - snapshots go through ioctls
                     directly. A ~2 MB package, already present on Fedora and
                     openSUSE, `apt install btrfs-progs` on Debian and Ubuntu.
 
@@ -46,13 +46,13 @@ WHAT THIS STILL NEEDS:
                     store at all.
 
 NOTHING SHIPS. The store is created locally by `truncate` + `mkfs.btrfs`, which
-costs one download of zero bytes. Shipping a pre-made image looks appealing —
-an empty btrfs image compresses to almost nothing — but decompressing it writes
+costs one download of zero bytes. Shipping a pre-made image looks appealing -
+an empty btrfs image compresses to almost nothing - but decompressing it writes
 every zero byte back out, so a 16 G artifact lands as 16 G of real disk rather
 than a sparse file. Creating it locally is both smaller to distribute and
 correct on arrival, and it lets the ceiling be a local choice.
 
-UNVERIFIED — written on a Mac against the kernel's ioctl contract, never run.
+UNVERIFIED - written on a Mac against the kernel's ioctl contract, never run.
 The ioctl numbers, the sparse-file behaviour under btrfs, and unprivileged
 snapshot creation all want confirming on a real Linux box before this is
 trusted.
@@ -118,7 +118,7 @@ class BtrfsImage(WorkspaceDriver):
         subprocess.run(["cp", "-a", f"{source}/.", str(base)], check=True)
 
     def sweep(self) -> int:
-        """Nothing to close — no per-workspace handles are ever held."""
+        """Nothing to close - no per-workspace handles are ever held."""
         return 0
 
     # --- Core cloning functions ---
@@ -133,7 +133,7 @@ class BtrfsImage(WorkspaceDriver):
 
     def open(self, folder: str) -> Path:
         """
-        A subvolume is already a path — this only makes sure the store is up.
+        A subvolume is already a path - this only makes sure the store is up.
 
         Free, unlike the macOS equivalent, which is why Linux has no mount
         lifecycle to manage.
@@ -145,15 +145,15 @@ class BtrfsImage(WorkspaceDriver):
         return path
 
     def close(self, folder: str) -> None:
-        """Nothing to release — the store stays mounted for the whole run."""
+        """Nothing to release - the store stays mounted for the whole run."""
 
     # --- Not built yet ---
 
-    def destroy(self, folder: str) -> None:  # noqa: V105 — required by the contract; nothing calls destroy() yet
+    def destroy(self, folder: str) -> None:  # noqa: V105 - required by the contract; nothing calls destroy() yet
         """
         TODO: BTRFS_IOC_SNAP_DESTROY_V2 on the subvolume.
 
-        Deliberately a no-op for now. Cheaper here than on macOS — deleting a
+        Deliberately a no-op for now. Cheaper here than on macOS - deleting a
         subvolume frees exactly the blocks it diverged, with no high-water mark
         to work around.
         """
@@ -165,8 +165,8 @@ class BtrfsImage(WorkspaceDriver):
         """
         The directory subvolumes live in.
 
-        On a host that is *already* btrfs — Fedora, openSUSE, Garuda, or anyone
-        who chose it at install — that is the workspaces directory itself. No
+        On a host that is *already* btrfs - Fedora, openSUSE, Garuda, or anyone
+        who chose it at install - that is the workspaces directory itself. No
         image, no mkfs.btrfs, no root: snapshots are unprivileged, so such a
         host needs nothing installed and nothing elevated.
 
@@ -193,11 +193,11 @@ class BtrfsImage(WorkspaceDriver):
 
         if which("mkfs.btrfs") is None:
             raise CopyUnavailableError(
-                "mkfs.btrfs is not installed — the workspace store is formatted "
+                "mkfs.btrfs is not installed - the workspace store is formatted "
                 "once on first run and needs it. Install btrfs-progs "
                 "(`apt install btrfs-progs`, `dnf install btrfs-progs`); it is "
                 "already present on Fedora and openSUSE. Nothing needs it "
-                "afterwards — snapshots go through ioctls."
+                "afterwards - snapshots go through ioctls."
             )
         building = self.store_image.with_suffix(".building")
         building.unlink(missing_ok=True)
@@ -216,12 +216,12 @@ class BtrfsImage(WorkspaceDriver):
         """
         Make sure the store is usable, mounting an image only if we need one.
 
-        Returns immediately on a btrfs host — there is nothing to mount, which
+        Returns immediately on a btrfs host - there is nothing to mount, which
         is the whole point of that path. Otherwise this is the one place root
         is required; if a setup step or an fstab entry mounted it already,
         everything downstream runs unprivileged.
         """
-        if self.mount_root == self.root:  # already btrfs — nothing to stand in for
+        if self.mount_root == self.root:  # already btrfs - nothing to stand in for
             return
 
         self._ensure_image()
@@ -229,7 +229,7 @@ class BtrfsImage(WorkspaceDriver):
         if os.path.ismount(self.mount_root):
             if fstype(self.mount_root) != "btrfs":
                 raise CopyUnavailableError(
-                    f"{self.mount_root} is mounted but is not btrfs — unmount it first"
+                    f"{self.mount_root} is mounted but is not btrfs - unmount it first"
                 )
             return
 
@@ -266,14 +266,14 @@ class BtrfsImage(WorkspaceDriver):
 #     #define BTRFS_IOC_SNAP_CREATE_V2 \
 #         _IOW(BTRFS_IOCTL_MAGIC, 23, struct btrfs_ioctl_vol_args_v2)
 #
-# _IOW, not _IOWR — the kernel writes `transid` back, which tempts you into
+# _IOW, not _IOWR - the kernel writes `transid` back, which tempts you into
 # _IOWR, but the header says otherwise and the number has to match exactly.
 # Getting it wrong yields ENOTTY, not a useful error.
 #
 # btrfs_ioctl_vol_args_v2 is 4096 bytes: s64 fd, u64 transid, u64 flags,
 # u64 unused[4], char name[4040].
 #
-# The _IOC layout below is the asm-generic one — correct for x86, x86_64, arm,
+# The _IOC layout below is the asm-generic one - correct for x86, x86_64, arm,
 # arm64, riscv and s390. Alpha, MIPS, PowerPC, PA-RISC and SPARC encode
 # direction and size differently, so this would need reworking there.
 VOL_ARGS_V2 = 4096

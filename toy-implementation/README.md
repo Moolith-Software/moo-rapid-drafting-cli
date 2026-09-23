@@ -14,13 +14,13 @@ toy-implementation/
 
 ## How it works
 
-1. **initialize** — create a `features` row and a CoW clone of `base/` at
+1. **initialize** - create a `features` row and a CoW clone of `base/` at
    `backend/workspaces/feature-<id>/` (macOS `cp -c`, instant, zero extra disk).
-2. **add** — in the background, run `codex exec` inside that clone. Codex reads the
+2. **add** - in the background, run `codex exec` inside that clone. Codex reads the
    code, edits files in place, and writes a plain-English summary.
-3. **status** — the engine writes status at each step
+3. **status** - the engine writes status at each step
    (`copying → warming → running → completed`); the page polls it.
-4. **refine** — re-run Codex on the same clone; the new summary is appended to the
+4. **refine** - re-run Codex on the same clone; the new summary is appended to the
    feature's `refinements`.
 
 ## Prerequisites
@@ -57,11 +57,12 @@ npm run dev
 
 Open http://localhost:5173, type a feature, and click **Run feature**.
 
-**Checks.** Formatting, lint, types and dead code, the same four a push runs:
+**Checks.** Formatting, lint, types, dead code and emdashes, the
+same five a push runs:
 
 ```bash
 cd frontend
-npm run check:backend   # all four, read-only
+npm run check:backend   # all five, read-only
 npm run fix:backend     # apply the fixable lint and formatting changes
 ```
 
@@ -93,3 +94,4 @@ npm run dev
 | `progress`         | latest live status line (for polling)                          |
 | `created_at`       | unix timestamp                                                 |
 ```
+

@@ -6,8 +6,8 @@ writes edits directly to disk. We hand it a workspace and a prompt, and get back
 one turn's result.
 
 A *turn* is one input and its complete result. Inside a single turn the agent may
-make dozens of model and tool calls — reading files, editing, checking the build
-— until it decides it is done.
+make dozens of model and tool calls - reading files, editing, checking the build
+- until it decides it is done.
 
 A *thread* is a conversation that remembers previous turns. Which one we open
 mirrors our feature tree:
@@ -52,7 +52,7 @@ from core.utils import mentions, readable_duration
 
 from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
-# Default location, at the backend root rather than beside this file — stored
+# Default location, at the backend root rather than beside this file - stored
 # session ids point into it, so it must not move when this module does.
 CODEX_HOME = Path(__file__).resolve().parents[3] / ".codex_home"
 
@@ -232,11 +232,11 @@ class CodexProvider(Provider):
         read_only: bool = False,
     ) -> Thread:
         """
-        Branch, continue, or start a conversation — see the module docstring.
+        Branch, continue, or start a conversation - see the module docstring.
 
         A stored session may be gone: pruned, or CODEX_HOME cleared. Codex says
         so here, before any turn runs, so we fall back to a fresh session and
-        lose the conversation history — never the work, which is on disk.
+        lose the conversation history - never the work, which is on disk.
         """
         sandbox = Sandbox.read_only if read_only else Sandbox.workspace_write
         options = {"cwd": str(workspace), "sandbox": sandbox}
@@ -247,7 +247,7 @@ class CodexProvider(Provider):
                 return codex.thread_resume(session_id, **options)
         except InvalidRequestError:
             print(
-                f"{self.tags} session {session_id or fork_from} not found — starting fresh",
+                f"{self.tags} session {session_id or fork_from} not found - starting fresh",
                 flush=True,
             )
         return codex.thread_start(**options)

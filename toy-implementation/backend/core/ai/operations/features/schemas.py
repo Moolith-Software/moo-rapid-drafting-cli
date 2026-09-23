@@ -25,13 +25,13 @@ class FeatureSummary(BaseModel):
 
     model_config = _STRICT
 
-    feature_title: str = Field(  # noqa: V107 — a key in the JSON the model returns; never read as an attribute
+    feature_title: str = Field(  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
         description="A short, clean, human-readable title for this feature (max one sentence)."
     )
     summary: str = Field(
         description="One or two plain-English sentences describing what was added."
     )
-    highlights: list[str] = _HIGHLIGHTS  # noqa: V107 — a key in the JSON the model returns; never read as an attribute
+    highlights: list[str] = _HIGHLIGHTS  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
 
 
 class RefinementSummary(BaseModel):
@@ -48,7 +48,7 @@ class RefinementSummary(BaseModel):
         description="One or two plain-English sentences describing what this "
         "refinement changed about the existing feature."
     )
-    highlights: list[str] = _HIGHLIGHTS  # noqa: V107 — a key in the JSON the model returns; never read as an attribute
+    highlights: list[str] = _HIGHLIGHTS  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
 
 
 class PrimingAck(BaseModel):
@@ -58,7 +58,7 @@ class PrimingAck(BaseModel):
 
     model_config = _STRICT
 
-    understood: bool = Field(description="Always true.")  # noqa: V107 — a key in the JSON the model returns; never read as an attribute
+    understood: bool = Field(description="Always true.")  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
 
 
 FEATURE_SCHEMA = FeatureSummary.model_json_schema()
@@ -87,8 +87,8 @@ def _parse(model: type[BaseModel], reply: str) -> dict:
 
     The schema constrains the reply, but it arrives as a *string* we still have
     to parse. A reply that does not match means the turn did not really produce
-    what we asked for — an agent that trailed off mid-thought, or a provider that
-    does not enforce schemas — so it raises rather than passing off prose as a
+    what we asked for - an agent that trailed off mid-thought, or a provider that
+    does not enforce schemas - so it raises rather than passing off prose as a
     summary.
     """
     if not reply.strip():

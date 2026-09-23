@@ -84,16 +84,16 @@ class FeatureResponse(BaseModel):
 
     id: int
     parent_id: int | None
-    code_folder_name: str  # noqa: V107 — a SQL column and dict key; never read as an attribute
+    code_folder_name: str  # noqa: V107 - a SQL column and dict key; never read as an attribute
     feature: str
     file_changes: list[dict]
     summary: dict
     refinements: list[dict]
     status: str
     progress: str
-    codex_session_id: str | None  # noqa: V107 — a SQL column and dict key; never read as an attribute
-    workspace_version: int  # noqa: V107 — a SQL column and dict key; never read as an attribute
-    cloned_from_version: int | None  # noqa: V107 — a SQL column and dict key; never read as an attribute
+    codex_session_id: str | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
+    workspace_version: int  # noqa: V107 - a SQL column and dict key; never read as an attribute
+    cloned_from_version: int | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
     created_at: float
 
 

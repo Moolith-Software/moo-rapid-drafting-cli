@@ -66,7 +66,7 @@ def startup() -> None:
             f"[workspaces] closed {closed} left open by a previous run",
             flush=True,
         )
-    # Bases are built per project, by the add-project endpoint — not built yet.
+    # Bases are built per project, by the add-project endpoint - not built yet.
     print(f"[workspaces] driver: {workspaces.driver_name()}", flush=True)
 
 

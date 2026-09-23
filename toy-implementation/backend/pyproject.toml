@@ -41,7 +41,7 @@ select = [
     "ERA",    # commented-out code
     "ARG",    # arguments nothing reads
     "C90",    # cyclomatic complexity
-    "PGH",    # blanket noqa / blanket type-ignore — see dummy-variable-rgx below
+    "PGH",    # blanket noqa / blanket type-ignore - see dummy-variable-rgx below
     "RUF",    # includes RUF100, noqa comments that no longer suppress anything
     "PLR0911", "PLR0912", "PLR0915",  # too many returns / branches / statements
     "TID252", # imports reaching into a parent package (`..`); siblings (`.`) stay fine
@@ -56,8 +56,8 @@ select = [
 
 # Deliberately NOT enabled, each because it fights a decision already made here:
 #   TRY003  would demand an exception class per message; errors.py is built the other way
-#   S603/S607 subprocess — inherent to the cloning drivers
-#   E501    line length — ruff format owns this
+#   S603/S607 subprocess - inherent to the cloning drivers
+#   E501    line length - ruff format owns this
 
 # Vulture's codes (V101-V201) appear in `# noqa` comments in this codebase.
 # Without this, RUF102 calls them invalid rule codes and -- because that rule is
@@ -97,7 +97,7 @@ ignore_decorators = ["@app.*", "@router.*", "@field_validator", "@model_validato
 # Assigned to, read by the library, never read by us. These three are naming
 # conventions that always mean the same thing, so they are ignored globally.
 # Anything else is suppressed at the line it happens on, with `# noqa: V1xx`
-# and a reason — see `grep -rn "noqa: V" .` for every one of them.
+# and a reason - see `grep -rn "noqa: V" .` for every one of them.
 ignore_names = ["model_config", "row_factory", "cls"]
 
 # ---------------------------------------------------------------------------

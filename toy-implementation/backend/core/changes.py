@@ -4,7 +4,7 @@ Deterministic change detection for a workspace.
 Codex edits files directly on disk rather than handing back a list of changes, so
 we work out what actually changed by hashing the tree before and after a turn and
 diffing the two snapshots. This is the source of truth for a feature's file
-changes — the model's own summary is narrative only and is never trusted here.
+changes - the model's own summary is narrative only and is never trusted here.
 
 We don't assume Workspaces are already git repos even if they might be,
 hence the hand-rolled snapshot instead of a git diff.

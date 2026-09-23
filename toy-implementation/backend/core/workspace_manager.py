@@ -20,7 +20,7 @@ _driver = cloning.get_driver(WORKSPACES_DIR)
 
 
 def driver_name() -> str:
-    """Which driver is doing the copying — for logs and benchmarks."""
+    """Which driver is doing the copying - for logs and benchmarks."""
     return _driver.name
 
 
@@ -88,6 +88,6 @@ def close_workspace(folder_name: str) -> None:
 
     Only the preview calls this, because the dev server outlives the turn that
     created it and is the last thing using the workspace. A turn deliberately
-    does not close on its way out — it would unmount the volume Vite is serving.
+    does not close on its way out - it would unmount the volume Vite is serving.
     """
     _driver.close(folder_name)

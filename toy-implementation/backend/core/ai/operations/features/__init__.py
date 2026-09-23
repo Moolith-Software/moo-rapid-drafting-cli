@@ -1,7 +1,7 @@
 """
 The feature operation: build or refine a feature by editing a workspace.
 
-Self-contained — the prompts that ask for the work, the schema of the reply, and
+Self-contained - the prompts that ask for the work, the schema of the reply, and
 the meaning of that reply all live here.
 
     operation.py    add_feature() and refine_feature()

@@ -71,6 +71,6 @@ class WorkspaceDriver(ABC):
 
     # --- Not built yet ---
 
-    @abstractmethod  # noqa: V105 — on the contract; nothing calls destroy() yet
+    @abstractmethod  # noqa: V105 - on the contract; nothing calls destroy() yet
     def destroy(self, folder: str) -> None:
         """Delete a branch and reclaim its space. Not built on any driver yet."""

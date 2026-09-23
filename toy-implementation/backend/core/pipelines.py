@@ -35,13 +35,13 @@ def preload_environment(parent_id: int | None = None) -> None:
     """
     Build an environment before anyone asks for one.
 
-    The frontend calls this on hover, so the slow parts — cloning, connecting,
-    warming the prompt cache, starting the preview — are already done by the
+    The frontend calls this on hover, so the slow parts - cloning, connecting,
+    warming the prompt cache, starting the preview - are already done by the
     time a request is typed.
     """
     try:
         feature_id = db.create_feature(parent_id=parent_id)
-    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
+    except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
         errors.wrap(exc)
         return
     build_environment(feature_id)
@@ -82,7 +82,7 @@ def build_environment(feature_id: int) -> dict | None:
             f"{time.monotonic() - started:.2f}s",
             flush=True,
         )
-    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
+    except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
         db.update_feature(
             feature_id,
             status=statuses.FAILED,
@@ -136,7 +136,7 @@ def run_add(feature_id: int) -> None:
             progress="Done.",
         )
 
-    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
+    except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
         db.update_feature(
             feature_id,
             status=statuses.FAILED,
@@ -184,7 +184,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
             progress="Done.",
         )
 
-    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
+    except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
         db.update_feature(
             feature_id,
             status=statuses.FAILED,
@@ -197,7 +197,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
 
 def _recap(row: dict) -> str:
     """
-    What the feature does so far — the first turn, then each refinement in order.
+    What the feature does so far - the first turn, then each refinement in order.
     Only place we have this is history is here, otherwise model wouldn't see these changes.
     """
     story = [row["summary"].get("summary") or row["feature"]]

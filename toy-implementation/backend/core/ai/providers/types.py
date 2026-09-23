@@ -2,7 +2,7 @@
 What every provider must look like.
 
 A provider runs one turn against a workspace and returns whatever the model
-finally said. It knows nothing about features, prompts, or what the text means —
+finally said. It knows nothing about features, prompts, or what the text means -
 that belongs to the operation asking for it (see core/ai/operations).
 
 Providers are classes rather than modules so more than one can exist at a time:
@@ -28,7 +28,7 @@ class TurnOutcome:
 
 
 # How long a single turn may run before it is interrupted. A backstop for a hung
-# turn, not a target — big refactors legitimately run for many minutes.
+# turn, not a target - big refactors legitimately run for many minutes.
 MAX_TURN_TIMEOUT = 20 * 60
 
 

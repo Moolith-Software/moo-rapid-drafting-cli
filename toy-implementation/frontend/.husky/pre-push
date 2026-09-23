@@ -6,7 +6,7 @@
 # fresh clone or a worktree that has no .venv yet.
 
 if ! command -v uv > /dev/null 2>&1; then
-  echo "pre-push: uv not on PATH — install it or push with --no-verify" >&2
+  echo "pre-push: uv not on PATH - install it or push with --no-verify" >&2
   exit 1
 fi
 

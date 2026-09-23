@@ -1,5 +1,5 @@
 """
-Windows — not implemented. The design is not settled, and guessing would be
+Windows - not implemented. The design is not settled, and guessing would be
 worse than failing loudly.
 
 Two candidate routes, neither verified:
@@ -7,7 +7,7 @@ Two candidate routes, neither verified:
     block-clone a .vhdx on ReFS   the direct analog of the macOS driver.
                                   FSCTL_DUPLICATE_EXTENTS_TO_FILE clones the
                                   one container file in constant time, and the
-                                  result is a *peer* rather than a child — so
+                                  result is a *peer* rather than a child - so
                                   there is no differencing chain for reads to
                                   walk, and space follows ReFS cluster
                                   granularity (4-64 KB).
@@ -18,7 +18,7 @@ Two candidate routes, neither verified:
                                   chain that every read must walk.
 
 A third, simplest option is per-file ReFS block cloning with no image at all:
-no mounting and no runtime elevation, but O(files) metadata — the very thing
+no mounting and no runtime elevation, but O(files) metadata - the very thing
 the image design exists to avoid. It makes a reasonable unconfigured fallback.
 
 BLOCKED ON FOUR QUESTIONS, none answerable from macOS:

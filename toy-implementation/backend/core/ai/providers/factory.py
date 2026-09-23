@@ -1,5 +1,5 @@
 """
-Provider factory — the single place where configuration selects the active
+Provider factory - the single place where configuration selects the active
 provider. Swapping providers is an environment change, never a change to the
 pipeline or the frontend.
 
