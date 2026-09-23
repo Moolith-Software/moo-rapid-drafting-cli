@@ -50,10 +50,11 @@ def build_base() -> None:
 
 def sweep() -> int:
     """
-    Close workspaces a previous run left open, and return how many.
+    Close every open workspace, and return how many.
 
-    A killed process releases nothing, so its workspaces stay open and hold
-    memory. Call once at startup.
+    At startup it cleans up after a killed process, which releases nothing, so
+    its workspaces stay open and hold memory. At shutdown it closes whatever no
+    preview owned, such as a build that failed midway.
     """
     return _driver.sweep()
 

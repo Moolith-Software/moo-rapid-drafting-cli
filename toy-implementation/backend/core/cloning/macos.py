@@ -62,7 +62,7 @@ class SparseImages(WorkspaceDriver):
             raise
 
     def sweep(self) -> int:
-        """Unmount images a killed run left mounted, and return how many."""
+        """Unmount every mounted image, and return how many."""
         if not self.mount_root.is_dir():
             return 0
         closed = 0

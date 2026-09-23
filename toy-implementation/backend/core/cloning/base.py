@@ -39,7 +39,7 @@ class WorkspaceDriver(ABC):
 
     @abstractmethod
     def sweep(self) -> int:
-        """Release what a killed run left open; return how many. Runs at startup."""
+        """Release every open workspace; return how many. Runs at startup and shutdown."""
 
     # --- Core cloning functions ---
 

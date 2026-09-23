@@ -98,6 +98,7 @@ def shutdown() -> None:
     preview.stop_all()  # don't leave orphan dev servers running
     _FEATURE_POOL.shutdown(wait=False, cancel_futures=True)
     _PRELOAD_POOL.shutdown(wait=False, cancel_futures=True)
+    workspaces.sweep()
 
 
 @app.exception_handler(errors.DatabaseUnavailableError)
