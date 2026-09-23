@@ -9,8 +9,8 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from constants.paths import BACKEND_DIR
 from core import errors
-from paths import BACKEND_DIR
 
 # The database lives under backend/data/.
 DB_PATH = BACKEND_DIR / "data" / "app.db"

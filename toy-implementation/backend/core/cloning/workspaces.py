@@ -8,7 +8,7 @@ the database, or the AI.
 import uuid
 from pathlib import Path
 
-from paths import BACKEND_DIR
+from constants.paths import BACKEND_DIR
 
 from .driver import get_driver
 

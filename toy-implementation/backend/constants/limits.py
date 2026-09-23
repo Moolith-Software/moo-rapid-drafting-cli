@@ -1,5 +1,5 @@
 """
-Hard ceiling limits  on what a single request may ask for.
+Hard ceiling limits on what a single request may ask for.
 """
 
 # Environments one /core/preload_environment call may warm.

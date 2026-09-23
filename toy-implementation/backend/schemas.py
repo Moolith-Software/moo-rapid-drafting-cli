@@ -6,25 +6,25 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
-import constants
+from constants import limits
 from core.ai.harnesses import HarnessName
 
 # Basic Field Checks
 Request = Annotated[
     str,
     StringConstraints(
-        strip_whitespace=True, min_length=1, max_length=constants.MAX_REQUEST_CHARS
+        strip_whitespace=True, min_length=1, max_length=limits.MAX_REQUEST_CHARS
     ),
 ]
 
 
 class PreloadEnvironmentBody(BaseModel):
-    count: int = Field(1, ge=1, le=constants.MAX_ENVIRONMENTS)
+    count: int = Field(1, ge=1, le=limits.MAX_ENVIRONMENTS)
     parent_id: int | None = Field(None, ge=1)
 
 
 RequestBatch = Annotated[
-    list[Request], Field(min_length=1, max_length=constants.MAX_ADD_FEATURES)
+    list[Request], Field(min_length=1, max_length=limits.MAX_ADD_FEATURES)
 ]
 
 

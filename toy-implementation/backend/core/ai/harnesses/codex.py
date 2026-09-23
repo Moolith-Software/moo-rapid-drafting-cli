@@ -40,6 +40,7 @@ from openai_codex import (
 from openai_codex.types import TurnStatus
 from pydantic import ValidationError
 
+from constants.paths import BACKEND_DIR
 from core.errors import (
     AppError,
     AuthRejectedError,
@@ -50,7 +51,6 @@ from core.errors import (
     UnknownAIError,
 )
 from core.utils import mentions, readable_duration
-from paths import BACKEND_DIR
 
 from .types import MAX_TURN_TIMEOUT, Harness, HarnessName, TurnOutcome
 
