@@ -75,7 +75,9 @@ def build_environment(feature_id: int) -> dict | None:
         result = feature_ai.prewarm_ai_session(env.workspace)
         preview.start_preview(f"feature-{feature_id}", env.workspace, env.folder)
 
-        features.update_feature(feature_id, codex_session_id=result.session_id)
+        features.update_feature(
+            feature_id, harness_session_id=result.session_id, harness=result.harness
+        )
         if not row["feature"]:  # no request attached, so it joins the warm pool
             features.update_feature(
                 feature_id, status=statuses.READY, progress="Ready."
@@ -120,7 +122,8 @@ def run_add(feature_id: int) -> None:
         result = feature_ai.add_feature(
             workspace,
             row["feature"],
-            session_id=row["codex_session_id"],
+            session_id=row["harness_session_id"],
+            session_harness=row["harness"],
         )
         after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
@@ -135,7 +138,8 @@ def run_add(feature_id: int) -> None:
             feature_id,
             file_changes=file_changes,
             summary=result.summary,
-            codex_session_id=result.session_id,
+            harness_session_id=result.session_id,
+            harness=result.harness,
             status=statuses.COMPLETED,
             progress="Done.",
         )
@@ -170,7 +174,8 @@ def run_refine(feature_id: int, user_request: str) -> None:
             workspace,
             recap,
             user_request,
-            session_id=row["codex_session_id"],
+            session_id=row["harness_session_id"],
+            session_harness=row["harness"],
         )
         after = changes.snapshot(workspace)
         file_changes = changes.diff_snapshots(before, after)
@@ -183,7 +188,8 @@ def run_refine(feature_id: int, user_request: str) -> None:
         features.update_feature(
             feature_id,
             refinements=_append_refinement(row, user_request, file_changes, result),
-            codex_session_id=result.session_id,
+            harness_session_id=result.session_id,
+            harness=result.harness,
             status=statuses.COMPLETED,
             progress="Done.",
         )

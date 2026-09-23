@@ -79,9 +79,9 @@ dummy-variable-rgx = "^_$"
 max-complexity = 10
 
 [tool.ruff.lint.pylint]
-# Default is 5, which the AI provider signatures exceed on purpose -- run_turn
-# takes 6 and the feature operation takes 7. This is set to catch a function
-# that has genuinely become a dumping ground, not a wide interface.
+# Default is 5, which the feature operation's `_run` exceeds on purpose -- it
+# takes 7. This is set to catch a function that has genuinely become a dumping
+# ground, not a wide interface.
 max-args = 10
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ warn_return_any = true
 #   repositories.features (3)  return annotations disagree with what is returned
 #   core.pipelines (10)        db.get_feature returns `dict | None` and the
 #                              result is indexed without a None check
-#   core.ai.providers.codex (16)  a **dict[str, str] splatted into typed kwargs
+#   core.ai.harnesses.codex (16)  a **dict[str, str] splatted into typed kwargs
 
 [[tool.mypy.overrides]]
 module = "repositories.features"
@@ -139,5 +139,5 @@ module = "core.pipelines"
 disable_error_code = ["arg-type", "index"]
 
 [[tool.mypy.overrides]]
-module = "core.ai.providers.codex"
+module = "core.ai.harnesses.codex"
 disable_error_code = ["arg-type"]

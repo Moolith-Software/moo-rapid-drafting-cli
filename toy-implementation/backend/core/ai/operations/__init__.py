@@ -2,7 +2,7 @@
 What we ask the AI to do.
 
 An operation owns one job end to end: the prompt that asks for it, the schema of
-the reply, and what that reply means. It delegates the call itself to a provider,
+the reply, and what that reply means. It delegates the call itself to a harness,
 so the same operation works on Codex, Claude, or the mock.
 
 Each operation is its own package, laid out the same way - `operation.py` for

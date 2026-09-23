@@ -87,7 +87,7 @@ def _parse(model: type[BaseModel], reply: str) -> dict:
 
     The schema constrains the reply, but it arrives as a *string* we still have
     to parse. A reply that does not match means the turn did not really produce
-    what we asked for - an agent that trailed off mid-thought, or a provider that
+    what we asked for - an agent that trailed off mid-thought, or a harness that
     does not enforce schemas - so it raises rather than passing off prose as a
     summary.
     """

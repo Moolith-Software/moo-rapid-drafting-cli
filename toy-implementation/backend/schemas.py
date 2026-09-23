@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 import constants
+from core.ai.harnesses import HarnessName
 
 # Basic Field Checks
 Request = Annotated[
@@ -91,7 +92,8 @@ class FeatureResponse(BaseModel):
     refinements: list[dict]
     status: str
     progress: str
-    codex_session_id: str | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
+    harness_session_id: str | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
+    harness: HarnessName | None
     workspace_version: int  # noqa: V107 - a SQL column and dict key; never read as an attribute
     cloned_from_version: int | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
     created_at: float

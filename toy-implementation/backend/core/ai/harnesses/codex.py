@@ -1,5 +1,5 @@
 """
-The OpenAI Codex provider.
+The OpenAI Codex harness.
 
 Codex does the real work: it reads the codebase, decides which files matter, and
 writes edits directly to disk. We hand it a workspace and a prompt, and get back
@@ -9,12 +9,13 @@ A *turn* is one input and its complete result. Inside a single turn the agent ma
 make dozens of model and tool calls - reading files, editing, checking the build
 - until it decides it is done.
 
-A *thread* is a conversation that remembers previous turns. Which one we open
-mirrors our feature tree:
+A *thread* is a conversation that remembers previous turns. Which one we open:
 
-    new feature   -> thread_start                 fresh session
-    child feature -> thread_fork(parent_session)  branch; parent left untouched
-    refinement    -> thread_resume(own_session)   linear continuation
+    no session yet    -> thread_start                fresh session
+    a stored session  -> thread_resume(session_id)   linear continuation
+
+A child feature gets its parent's code, not its conversation: its warm-up
+turn starts a fresh thread like any other environment.
 
 Auth lives in a project-local CODEX_HOME so Codex never picks up a stale global
 `codex login`. That folder also stores the session files our session ids point
@@ -51,13 +52,13 @@ from core.errors import (
 from core.utils import mentions, readable_duration
 from paths import BACKEND_DIR
 
-from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
+from .types import MAX_TURN_TIMEOUT, Harness, HarnessName, TurnOutcome
 
 # Default location, at the backend root rather than beside this file - stored
 # session ids point into it, so it must not move when this module does.
 CODEX_HOME = BACKEND_DIR / ".codex_home"
 
-# How hard the model should think. Every provider names these differently,
+# How hard the model should think. Every harness names these differently,
 # > gpt-5.6 rejects the SDK's "minimal" and accepts a "max" the SDK's enum does not list
 REASONING_EFFORT = "medium"  # none | low | medium | high | xhigh
 
@@ -86,7 +87,7 @@ def _translate(exc: Exception) -> AppError:
     """
     Turn anything the SDK throws into one of our codes, ordered by precedence.
 
-    A turn can die for perfectly ordinary reasons - the provider was
+    A turn can die for perfectly ordinary reasons - the server was
     busy, the subprocess went away - and that is still considered a failed run
 
     The last case is deliberately open: anything unrecognised, a bug of our own
@@ -104,8 +105,8 @@ def _translate(exc: Exception) -> AppError:
     return UnknownAIError(f"{type(exc).__name__}: {exc}")
 
 
-class CodexProvider(Provider):
-    name = "codex_sdk"
+class CodexHarness(Harness):
+    name = HarnessName.CODEX_SDK
 
     def __init__(
         self,
@@ -122,14 +123,11 @@ class CodexProvider(Provider):
         prompt: str,
         output_schema: dict,
         session_id: str | None = None,
-        fork_from: str | None = None,
         read_only: bool = False,
     ) -> TurnOutcome:
         try:
             with self._connect() as codex:
-                thread = self._open_thread(
-                    codex, workspace, session_id, fork_from, read_only
-                )
+                thread = self._open_thread(codex, workspace, session_id, read_only)
                 handle = thread.turn(
                     prompt,
                     output_schema=output_schema,
@@ -155,7 +153,9 @@ class CodexProvider(Provider):
                 TurnFailedError(f"turn ended as {result.status.value} (external)")
             )
 
-        return TurnOutcome(text=result.final_response or "", session_id=thread.id)
+        return TurnOutcome(
+            text=result.final_response or "", session_id=thread.id, harness=self.name
+        )
 
     def _wait_for_result(self, handle: TurnHandle) -> TurnResult:
         """
@@ -229,11 +229,10 @@ class CodexProvider(Provider):
         codex: Codex,
         workspace: Path,
         session_id: str | None,
-        fork_from: str | None,
         read_only: bool = False,
     ) -> Thread:
         """
-        Branch, continue, or start a conversation - see the module docstring.
+        Continue or start a conversation - see the module docstring.
 
         A stored session may be gone: pruned, or CODEX_HOME cleared. Codex says
         so here, before any turn runs, so we fall back to a fresh session and
@@ -241,14 +240,12 @@ class CodexProvider(Provider):
         """
         sandbox = Sandbox.read_only if read_only else Sandbox.workspace_write
         options = {"cwd": str(workspace), "sandbox": sandbox}
-        try:
-            if fork_from:
-                return codex.thread_fork(fork_from, **options)
-            if session_id:
+        if session_id:
+            try:
                 return codex.thread_resume(session_id, **options)
-        except InvalidRequestError:
-            print(
-                f"{self.tags} session {session_id or fork_from} not found - starting fresh",
-                flush=True,
-            )
+            except InvalidRequestError:
+                print(
+                    f"{self.tags} session {session_id} not found - starting fresh",
+                    flush=True,
+                )
         return codex.thread_start(**options)

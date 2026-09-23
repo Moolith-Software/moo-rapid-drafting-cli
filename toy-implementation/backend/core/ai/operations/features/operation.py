@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.ai import providers
+from core.ai import harnesses
 from core.errors import AppError
 
 from . import prompts, schemas
@@ -18,13 +18,14 @@ class FeatureResult:
 
     summary: dict
     session_id: str
+    harness: harnesses.HarnessName  # the harness that owns session_id
 
 
 def add_feature(
     workspace: Path,
     user_request: str,
     session_id: str | None = None,
-    fork_from: str | None = None,
+    session_harness: harnesses.HarnessName | None = None,
 ) -> FeatureResult:
     """Build a feature that has not been started yet."""
     return _run(
@@ -33,7 +34,7 @@ def add_feature(
         schemas.FEATURE_SCHEMA,
         schemas.parse_feature_summary,
         session_id,
-        fork_from,
+        session_harness,
     )
 
 
@@ -58,6 +59,7 @@ def refine_feature(
     recap: str,
     user_request: str,
     session_id: str | None = None,
+    session_harness: harnesses.HarnessName | None = None,
 ) -> FeatureResult:
     """Apply a follow-up request to a feature that already ran."""
     return _run(
@@ -66,7 +68,7 @@ def refine_feature(
         schemas.REFINEMENT_SCHEMA,
         schemas.parse_refinement_summary,
         session_id,
-        None,
+        session_harness,
     )
 
 
@@ -76,25 +78,34 @@ def _run(
     output_schema: dict,
     parse: Callable[[str], dict],
     session_id: str | None,
-    fork_from: str | None,
+    session_harness: harnesses.HarnessName | None,
     read_only: bool = False,
 ) -> FeatureResult:
-    provider = providers.create_provider()
-    outcome = provider.run_turn(
+    harness = harnesses.create_harness()
+    # A session only means something to the harness that made it. If the
+    # configured harness has changed since, start fresh, as a missing session does.
+    if session_id and session_harness != harness.name:
+        print(
+            f"{harness.tags} session {session_id} belongs to {session_harness} - starting fresh",
+            flush=True,
+        )
+        session_id = None
+    outcome = harness.run_turn(
         workspace,
         prompt,
         output_schema,
         session_id=session_id,
-        fork_from=fork_from,
         read_only=read_only,
     )
     # A turn that did not finish has already raised, so reaching here means the
-    # provider has something to show for it.
+    # harness has something to show for it.
     #
     # Raises BadOutputError if the reply is not the shape we asked for
     try:
         summary = parse(outcome.text)
     except AppError as exc:
-        provider.tag(exc)
+        harness.tag(exc)
         raise
-    return FeatureResult(summary=summary, session_id=outcome.session_id)
+    return FeatureResult(
+        summary=summary, session_id=outcome.session_id, harness=outcome.harness
+    )

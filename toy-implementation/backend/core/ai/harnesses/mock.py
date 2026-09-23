@@ -1,5 +1,5 @@
 """
-A fake provider: no API calls, no cost.
+A fake harness: no API calls, no cost.
 
 It makes a real (small) edit to the workspace, so change detection has something
 genuine to find and the whole pipeline - clone, turn, diff, summary, status - can
@@ -17,13 +17,13 @@ from pathlib import Path
 from core.errors import TurnTimeoutError
 from core.utils import readable_duration
 
-from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
+from .types import MAX_TURN_TIMEOUT, Harness, HarnessName, TurnOutcome
 
 NOTE_FILE = "MOCK_CHANGE.md"  # what the mock writes, so the diff has something real
 
 
-class MockProvider(Provider):
-    name = "mock"
+class MockHarness(Harness):
+    name = HarnessName.MOCK
 
     def __init__(
         self,
@@ -40,7 +40,6 @@ class MockProvider(Provider):
         prompt: str,
         output_schema: dict,
         session_id: str | None = None,
-        fork_from: str | None = None,
         read_only: bool = False,
     ) -> TurnOutcome:
         if self.simulate_timeout:
@@ -51,8 +50,8 @@ class MockProvider(Provider):
                 )
             )
 
-        # Reuse whichever session we were given so resume/fork behave believably.
-        session = session_id or fork_from or f"mock-{uuid.uuid4().hex[:8]}"
+        # Reuse the session we were given so a resume behaves believably.
+        session = session_id or f"mock-{uuid.uuid4().hex[:8]}"
 
         # A real edit, so snapshot/diff sees an actual change - unless the turn
         # was told it may not write, which is what a warm-up turn asks for.
@@ -61,7 +60,9 @@ class MockProvider(Provider):
             previous = note.read_text() if note.exists() else ""
             note.write_text(f"{previous}- {prompt.splitlines()[-1][:80]}\n")
 
-        return TurnOutcome(text=self._placeholder(output_schema), session_id=session)
+        return TurnOutcome(
+            text=self._placeholder(output_schema), session_id=session, harness=self.name
+        )
 
     def _placeholder(self, schema: dict) -> str:
         """

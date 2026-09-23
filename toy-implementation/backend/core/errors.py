@@ -12,14 +12,14 @@ never have to stringify a raw exception.
     9xxx  unknown    - anything we did not anticipate
 
 General title and error code, with granular information inside the message, passed from the
-provider.  Every AI provider must map/flatten its exceptions to these error codes.
+harness.  Every harness must map/flatten its exceptions to these error codes.
 
 Note: All exceptions have an "error" suffix for one taxonomy, even where the name reads as a state.
 """
 
 import traceback
 
-# The 2xxx band above: the errors a provider owns and may tag with its name.
+# The 2xxx band above: the errors a harness owns and may tag with its name.
 AI_BAND = range(2000, 3000)
 
 
@@ -71,7 +71,7 @@ class TurnFailedError(AppError):
 
 class TurnTimeoutError(
     AppError
-):  # message says whether it was our watchdog or within provider
+):  # message says whether it was our watchdog or within the harness
     code = 2002
     title = "AI timed out"
 

@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS features (
     refinements    TEXT NOT NULL DEFAULT '[]',    -- JSON: [{refinement_id, user_request, file_changes, summary}]
     status         TEXT NOT NULL DEFAULT 'initializing',
     progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
-    codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
+    harness_session_id TEXT,                      -- the harness's session id (for resume/fork)
+    harness        TEXT CHECK (harness IN ('codex_sdk', 'mock')),  -- which harness owns that session; must match a harness's `name`
     workspace_version INTEGER NOT NULL DEFAULT 0, -- turns that have written to this workspace
     cloned_from_version INTEGER,                  -- the parent's workspace_version this was cloned from
     created_at     REAL NOT NULL
