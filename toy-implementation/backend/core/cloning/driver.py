@@ -14,7 +14,7 @@ def get_driver(root: Path) -> WorkspaceDriver:
     """
     The driver for this operating system
 
-    workspace_manager calls this once, when it is first imported, and keeps the
+    workspaces.py calls this once, when it is first imported, and keeps the
     result for the life of the app.
     """
     # Imported per platform rather than at the top, since they contain incompatible imports

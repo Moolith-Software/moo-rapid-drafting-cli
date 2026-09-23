@@ -89,7 +89,8 @@ max-args = 10
 # ---------------------------------------------------------------------------
 [tool.vulture]
 paths = ["."]
-exclude = [".venv", "__pycache__", ".codex_home", "workspaces", "data"]
+# Substring matches: "workspaces/" skips the clones folder, not core/cloning/workspaces.py
+exclude = [".venv", "__pycache__", ".codex_home", "workspaces/", "data"]
 min_confidence = 60
 # Registered by decorator and never called by name from Python.
 ignore_decorators = ["@app.*", "@router.*", "@field_validator", "@model_validator", "@validator"]

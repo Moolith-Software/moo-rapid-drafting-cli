@@ -1,6 +1,7 @@
 """
 Making a cheap copy of the app, one driver per operating system.
 
+    workspaces.py  what the rest of the app calls: clone, open, close, sweep
     base.py      the WorkspaceDriver contract every driver implements. Start here.
     driver.py    get_driver(), which picks the driver for this machine
     macos.py     one sparse image per branch, cloned with clonefile(2)

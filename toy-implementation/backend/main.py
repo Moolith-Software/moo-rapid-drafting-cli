@@ -29,7 +29,7 @@ import guards
 import preview
 import schemas
 from core import errors, pipelines
-from core import workspace_manager as workspaces
+from core.cloning import workspaces
 from repositories import database, features
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.

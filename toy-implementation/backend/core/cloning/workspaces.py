@@ -10,14 +10,14 @@ from pathlib import Path
 
 from paths import BACKEND_DIR
 
-from . import cloning
+from .driver import get_driver
 
 SOURCE_APP_DIR = BACKEND_DIR.parent / "base"  # the app build_base() copies in
 WORKSPACES_DIR = BACKEND_DIR / "workspaces"
 
 # Chosen once, by platform. Raises here rather than at the first clone, so an
 # unsupported host fails at startup with a reason instead of mid-feature.
-_driver = cloning.get_driver(WORKSPACES_DIR)
+_driver = get_driver(WORKSPACES_DIR)
 
 
 def driver_name() -> str:

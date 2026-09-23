@@ -8,7 +8,7 @@ code.
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import workspace_manager as workspaces
+from .cloning import workspaces
 
 
 @dataclass

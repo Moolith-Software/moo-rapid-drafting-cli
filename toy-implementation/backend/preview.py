@@ -18,7 +18,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from core import workspace_manager as workspaces
+from core.cloning import workspaces
 
 FIRST_PORT = 5200  # feature-<id> serves on FIRST_PORT + id
 

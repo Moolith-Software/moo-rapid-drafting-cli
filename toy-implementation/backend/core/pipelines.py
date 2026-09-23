@@ -27,8 +27,8 @@ import preview
 from repositories import features
 
 from . import changes, environments, errors, statuses
-from . import workspace_manager as workspaces
 from .ai.operations import features as feature_ai
+from .cloning import workspaces
 
 
 def preload_environment(parent_id: int | None = None) -> None:
