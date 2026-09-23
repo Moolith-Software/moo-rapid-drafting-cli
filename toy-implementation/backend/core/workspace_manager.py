@@ -8,9 +8,10 @@ the database, or the AI.
 import uuid
 from pathlib import Path
 
+from paths import BACKEND_DIR
+
 from . import cloning
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
 SOURCE_APP_DIR = BACKEND_DIR.parent / "base"  # the app build_base() copies in
 WORKSPACES_DIR = BACKEND_DIR / "workspaces"
 

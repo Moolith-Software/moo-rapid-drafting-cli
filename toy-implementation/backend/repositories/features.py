@@ -1,101 +1,17 @@
 """
-SQLite storage for features.
+Every query on the `features` table.
 
-One table, `features`, mirroring the schema from the flow diagram. We keep it
-deliberately simple: plain sqlite3 (no ORM), JSON stored as TEXT, and small
-helper functions that return plain dicts. This is a prototype, so readability
-beats cleverness.
+Helpers return plain dicts, and JSON columns are encoded and decoded here, so
+callers never touch a connection or a JSON string.
 """
 
 import json
 import sqlite3
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
 
-from core import errors, statuses
-
-# The database lives next to this file, under data/.
-DB_PATH = Path(__file__).parent / "data" / "app.db"
-
-
-# --- storage ----------------------------------------------------------------
-
-
-@contextmanager
-def _session(*, write: bool = False) -> Iterator[sqlite3.Connection]:
-    """
-    One connection, one transaction, always closed - and the single place a
-    storage failure becomes an AppError.
-    """
-    try:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)  # 5s busy_timeout by default
-        conn.row_factory = sqlite3.Row
-        # Off by default, and silently ignored once a transaction is open, so it
-        # belongs here and not next to the WAL pragma in init_db.
-        conn.execute("PRAGMA foreign_keys = ON")
-    except (OSError, sqlite3.Error) as exc:
-        raise errors.DatabaseUnavailableError(f"{type(exc).__name__}: {exc}") from exc
-
-    try:
-        if write:
-            conn.execute("BEGIN IMMEDIATE")
-        yield conn
-        conn.commit()
-    except sqlite3.Error as exc:
-        conn.rollback()
-        raise errors.DatabaseError(f"{type(exc).__name__}: {exc}") from exc
-    finally:
-        conn.close()
-
-
-def init_db() -> None:
-    """
-    Enable WAL, create the features table if needed, then apply lightweight
-    migrations.
-    TODO:  Nothing deletes features yet. When something does, a parent's
-    children have to go with it - but a feature is more than its row: it
-    owns a workspace folder and a preview server on port, neither of which a
-    SQL cascade can reach. That needs a real teardown path, not just ON DELETE CASCADE.
-    """
-    with _session() as conn:
-        # WAL lives in the database file, so it is set once here rather than per connection
-        mode = conn.execute("PRAGMA journal_mode = WAL").fetchone()[0]
-        if mode != "wal":
-            raise errors.DatabaseError(
-                f"could not enable WAL; journal_mode is {mode!r}"
-            )
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS features (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                parent_id      INTEGER REFERENCES features(id),  -- nested / refinement lineage
-                code_folder_name TEXT NOT NULL,               -- the CoW workspace folder name
-                feature        TEXT NOT NULL,                 -- the original (possibly rough) feature request
-                file_changes   TEXT NOT NULL DEFAULT '[]',    -- JSON: list of {path, kind}, deterministic
-                summary        TEXT NOT NULL DEFAULT '{}',     -- JSON: FeatureSummary (AI human-readable layer)
-                refinements    TEXT NOT NULL DEFAULT '[]',    -- JSON: [{refinement_id, user_request, file_changes, summary}]
-                status         TEXT NOT NULL DEFAULT 'initializing',
-                progress       TEXT NOT NULL DEFAULT '',       -- latest live status line (for polling)
-                codex_session_id TEXT,                        -- Codex thread/session id (for resume/fork)
-                workspace_version INTEGER NOT NULL DEFAULT 0, -- turns that have written to this workspace
-                cloned_from_version INTEGER,                  -- the parent's workspace_version this was cloned from
-                created_at     REAL NOT NULL
-            )
-            """
-        )
-
-        # Migration: add columns that older databases may be missing.
-        existing = {row["name"] for row in conn.execute("PRAGMA table_info(features)")}
-        if "codex_session_id" not in existing:
-            conn.execute("ALTER TABLE features ADD COLUMN codex_session_id TEXT")
-
-
-# --- core / features  ---------------------------------------------------------------
+from core import statuses
+from repositories import database
 
 
 def create_feature(parent_id: int | None = None) -> int:
@@ -105,7 +21,7 @@ def create_feature(parent_id: int | None = None) -> int:
     `code_folder_name` is left empty for whoever clones the workspace to fill
     in, because the folder is named after the id this insert is what creates.
     """
-    with _session() as conn:
+    with database.session() as conn:
         cur = conn.execute(
             """
             INSERT INTO features
@@ -142,7 +58,7 @@ def reserve_features(
         return []
 
     # write=True enables immediate True which blocks other writers in parallel until complete
-    with _session(write=True) as conn:
+    with database.session(write=True) as conn:
         # Claim what we can, create fresh rows for the rest, return in order
         claimed = _claim_ready(conn, feature_requests, parent_id)
         uncovered = feature_requests[len(claimed) :]
@@ -249,7 +165,7 @@ def claim_for_refine(feature_id: int) -> int | None:
 
     A failed feature is refinable, which is how a failed run gets retried
     """
-    with _session() as conn:
+    with database.session() as conn:
         row = conn.execute(
             """
             UPDATE features SET status = :taken, progress = ''
@@ -272,7 +188,7 @@ def bump_workspace_version(feature_id: int) -> None:
     """
     Record that a turn is about to write to this feature's workspace.
     """
-    with _session() as conn:
+    with database.session() as conn:
         conn.execute(
             """
             UPDATE features SET workspace_version = workspace_version + 1
@@ -294,7 +210,7 @@ def update_feature(feature_id: int, **fields: Any) -> None:
             fields[col] = json.dumps(fields[col])
 
     assignments = ", ".join(f"{key} = :{key}" for key in fields)
-    with _session() as conn:
+    with database.session() as conn:
         conn.execute(
             f"UPDATE features SET {assignments} WHERE id = :feature_id",
             {**fields, "feature_id": feature_id},
@@ -307,7 +223,7 @@ def set_status(feature_id: int, status: str, progress: str) -> None:
 
 
 def get_feature(feature_id: int) -> dict | None:
-    with _session() as conn:
+    with database.session() as conn:
         row = conn.execute(
             "SELECT * FROM features WHERE id = :feature_id",
             {"feature_id": feature_id},
@@ -320,7 +236,7 @@ def count_children(feature_id: int) -> int:
     How many features were branched off a parent?
     Used to "lock" a parent from refinement after it has children.
     """
-    with _session() as conn:
+    with database.session() as conn:
         row = conn.execute(
             """
             SELECT COUNT(*) AS branched FROM features
@@ -334,7 +250,7 @@ def count_children(feature_id: int) -> int:
 
 
 def list_features() -> list[dict]:
-    with _session() as conn:
+    with database.session() as conn:
         rows = conn.execute(
             "SELECT * FROM features ORDER BY created_at DESC"
         ).fetchall()

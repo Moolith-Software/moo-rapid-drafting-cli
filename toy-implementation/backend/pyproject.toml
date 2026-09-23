@@ -125,13 +125,13 @@ warn_return_any = true
 # worth fixing; nothing else in these files is exempt, and every other file is
 # checked for these codes. Remove an override and fix the file, one at a time.
 #
-#   db (3)                     return annotations disagree with what is returned
+#   repositories.features (3)  return annotations disagree with what is returned
 #   core.pipelines (10)        db.get_feature returns `dict | None` and the
 #                              result is indexed without a None check
 #   core.ai.providers.codex (16)  a **dict[str, str] splatted into typed kwargs
 
 [[tool.mypy.overrides]]
-module = "db"
+module = "repositories.features"
 disable_error_code = ["return-value"]
 
 [[tool.mypy.overrides]]

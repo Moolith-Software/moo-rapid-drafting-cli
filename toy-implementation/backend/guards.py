@@ -4,8 +4,8 @@ Preconditions for the /core endpoints.
 
 from fastapi import HTTPException
 
-import db
 from core import statuses
+from repositories import features
 
 
 def check_parent(parent_id: int | None) -> None:
@@ -14,7 +14,7 @@ def check_parent(parent_id: int | None) -> None:
     """
     if parent_id is None:
         return
-    parent = db.get_feature(parent_id)
+    parent = features.get_feature(parent_id)
     if parent is None:
         raise HTTPException(404, f"parent feature {parent_id} not found")
     if parent["status"] != statuses.COMPLETED:
@@ -27,7 +27,7 @@ def check_no_children(feature_id: int) -> None:
     """
     Make sure a parent has no children, blocking refinements so there are no divergences.
     """
-    branched = db.count_children(feature_id)
+    branched = features.count_children(feature_id)
     if branched:
         raise HTTPException(
             409,

@@ -11,6 +11,6 @@ The core of the tool - everything that actually builds a feature.
     utils.py              small pure helpers shared across the above
     ai/                   what we ask the AI for, and who answers
 
-Deliberately free of HTTP concerns; main.py wires these to endpoints, and db.py
+Deliberately free of HTTP concerns; main.py wires these to endpoints, and repositories/
 stores the results.
 """

@@ -49,12 +49,13 @@ from core.errors import (
     UnknownAIError,
 )
 from core.utils import mentions, readable_duration
+from paths import BACKEND_DIR
 
 from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 # Default location, at the backend root rather than beside this file - stored
 # session ids point into it, so it must not move when this module does.
-CODEX_HOME = Path(__file__).resolve().parents[3] / ".codex_home"
+CODEX_HOME = BACKEND_DIR / ".codex_home"
 
 # How hard the model should think. Every provider names these differently,
 # > gpt-5.6 rejects the SDK's "minimal" and accepts a "max" the SDK's enum does not list

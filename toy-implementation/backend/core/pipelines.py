@@ -6,7 +6,7 @@ This module is only the *order* of the steps. Each step lives elsewhere:
     core.environments     get a runnable environment ready (its own copy of the code)
     core.ai.operations.features     ask the AI to build or refine it
     core.changes          work out what actually changed on disk
-    db                    record status and results
+    repositories.features record status and results
 
 Which row to work on is settled in main.py, in the request thread: it claims a
 warm environment or creates an empty row, and passes the id here. So every
@@ -23,8 +23,8 @@ Lineage is a code relationship, not a conversational one:
 
 import time
 
-import db
 import preview
+from repositories import features
 
 from . import changes, environments, errors, statuses
 from . import workspace_manager as workspaces
@@ -40,7 +40,7 @@ def preload_environment(parent_id: int | None = None) -> None:
     time a request is typed.
     """
     try:
-        feature_id = db.create_feature(parent_id=parent_id)
+        feature_id = features.create_feature(parent_id=parent_id)
     except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
         errors.wrap(exc)
         return
@@ -57,13 +57,15 @@ def build_environment(feature_id: int) -> dict | None:
     Returns the finished row, or None when the build failed
     """
     started = time.monotonic()
-    row = db.get_feature(feature_id)
+    row = features.get_feature(feature_id)
     try:
-        db.set_status(feature_id, statuses.INITIALIZING, "Preparing the environment…")
+        features.set_status(
+            feature_id, statuses.INITIALIZING, "Preparing the environment…"
+        )
 
-        parent = db.get_feature(row["parent_id"]) if row["parent_id"] else None
+        parent = features.get_feature(row["parent_id"]) if row["parent_id"] else None
         env = environments.prepare_workspace(feature_id, parent)
-        db.update_feature(
+        features.update_feature(
             feature_id,
             code_folder_name=env.folder,
             cloned_from_version=parent["workspace_version"] if parent else None,
@@ -73,9 +75,11 @@ def build_environment(feature_id: int) -> dict | None:
         result = feature_ai.prewarm_ai_session(env.workspace)
         preview.start_preview(f"feature-{feature_id}", env.workspace, env.folder)
 
-        db.update_feature(feature_id, codex_session_id=result.session_id)
+        features.update_feature(feature_id, codex_session_id=result.session_id)
         if not row["feature"]:  # no request attached, so it joins the warm pool
-            db.update_feature(feature_id, status=statuses.READY, progress="Ready.")
+            features.update_feature(
+                feature_id, status=statuses.READY, progress="Ready."
+            )
 
         print(
             f"[pipeline] environment {feature_id} ready in "
@@ -83,13 +87,13 @@ def build_environment(feature_id: int) -> dict | None:
             flush=True,
         )
     except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
-        db.update_feature(
+        features.update_feature(
             feature_id,
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
         )
         return None
-    return db.get_feature(feature_id)
+    return features.get_feature(feature_id)
 
 
 def run_add(feature_id: int) -> None:
@@ -99,7 +103,7 @@ def run_add(feature_id: int) -> None:
     The row arrives already taken: either a warm environment that was waiting,
     or an empty row that still needs one built.
     """
-    row = db.get_feature(feature_id)
+    row = features.get_feature(feature_id)
     if not row[
         "code_folder_name"
     ]:  # arrived without a 'ready' environment, so build one now
@@ -110,8 +114,8 @@ def run_add(feature_id: int) -> None:
     try:
         workspace = workspaces.open_workspace(row["code_folder_name"])
 
-        db.bump_workspace_version(feature_id)
-        db.set_status(feature_id, statuses.BUILDING, "Implementing the feature…")
+        features.bump_workspace_version(feature_id)
+        features.set_status(feature_id, statuses.BUILDING, "Implementing the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.add_feature(
             workspace,
@@ -127,7 +131,7 @@ def run_add(feature_id: int) -> None:
                 "the AI reported success for adding the feature, but no files changed"
             )
 
-        db.update_feature(
+        features.update_feature(
             feature_id,
             file_changes=file_changes,
             summary=result.summary,
@@ -137,7 +141,7 @@ def run_add(feature_id: int) -> None:
         )
 
     except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
-        db.update_feature(
+        features.update_feature(
             feature_id,
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
@@ -154,13 +158,13 @@ def run_refine(feature_id: int, user_request: str) -> None:
     main.py reserved the row before submitting this, so it is known refinable
     and no second refinement can be running against the same workspace.
     """
-    row = db.get_feature(feature_id)
+    row = features.get_feature(feature_id)
     try:
         workspace = workspaces.open_workspace(row["code_folder_name"])
         recap = _recap(row)
 
-        db.bump_workspace_version(feature_id)
-        db.set_status(feature_id, statuses.REFINING, "Refining the feature…")
+        features.bump_workspace_version(feature_id)
+        features.set_status(feature_id, statuses.REFINING, "Refining the feature…")
         before = changes.snapshot(workspace)
         result = feature_ai.refine_feature(
             workspace,
@@ -176,7 +180,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
                 "the refinement AI reported success but no files changed"
             )
 
-        db.update_feature(
+        features.update_feature(
             feature_id,
             refinements=_append_refinement(row, user_request, file_changes, result),
             codex_session_id=result.session_id,
@@ -185,7 +189,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
         )
 
     except Exception as exc:  # noqa: BLE001 - worker thread boundary; no caller left to raise to
-        db.update_feature(
+        features.update_feature(
             feature_id,
             status=statuses.FAILED,
             progress=errors.wrap(exc).status_line(),
