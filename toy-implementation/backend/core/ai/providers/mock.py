@@ -5,7 +5,7 @@ It makes a real (small) edit to the workspace, so change detection has something
 genuine to find and the whole pipeline — clone, turn, diff, summary, status — can
 be exercised end to end offline.
 
-Set `simulate_timeout` to make it raise TurnTimeout instead, so the timeout path
+Set `simulate_timeout` to make it raise TurnTimeoutError instead, so the timeout path
 can be tested without spending API calls on a turn we mean to kill.
 """
 
@@ -14,10 +14,10 @@ import time
 import uuid
 from pathlib import Path
 
-from ...errors import TurnTimeout
-from ...utils import readable_duration
-from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
+from core.errors import TurnTimeoutError
+from core.utils import readable_duration
 
+from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 NOTE_FILE = "MOCK_CHANGE.md"  # what the mock writes, so the diff has something real
 
@@ -46,7 +46,9 @@ class MockProvider(Provider):
         if self.simulate_timeout:
             time.sleep(1)
             raise self.tag(
-                TurnTimeout(f"no result after {readable_duration(self.timeout)} (mock)")
+                TurnTimeoutError(
+                    f"no result after {readable_duration(self.timeout)} (mock)"
+                )
             )
 
         # Reuse whichever session we were given so resume/fork behave believably.

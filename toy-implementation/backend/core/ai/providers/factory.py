@@ -9,12 +9,13 @@ needs nothing. A name-to-class table would force them to match.
 """
 
 import os
-from typing import Mapping
+from collections.abc import Mapping
 
-from ...errors import ConfigError
-from .types import MAX_TURN_TIMEOUT, Provider
+from core.errors import ConfigError
+
 from .codex import CodexProvider
 from .mock import MockProvider
+from .types import MAX_TURN_TIMEOUT, Provider
 
 
 def create_provider(env: Mapping[str, str] | None = None) -> Provider:

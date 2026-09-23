@@ -11,7 +11,7 @@ that belongs to the operation asking for it (see core/ai/operations).
     mock.py      a fake one for offline work (the default)
 """
 
-from .types import Provider, TurnOutcome
 from .factory import create_provider
+from .types import Provider, TurnOutcome
 
 __all__ = ["Provider", "TurnOutcome", "create_provider"]

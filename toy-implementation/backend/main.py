@@ -77,9 +77,9 @@ def shutdown() -> None:
     _PRELOAD_POOL.shutdown(wait=False, cancel_futures=True)
 
 
-@app.exception_handler(errors.DatabaseUnavailable)
+@app.exception_handler(errors.DatabaseUnavailableError)
 def database_unavailable(
-    request: Request, exc: errors.DatabaseUnavailable
+    request: Request, exc: errors.DatabaseUnavailableError
 ) -> JSONResponse:
     """
     Could not reach the database at all, raise this significant exception

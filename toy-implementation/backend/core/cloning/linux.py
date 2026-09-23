@@ -66,8 +66,9 @@ import subprocess
 from pathlib import Path
 from shutil import which
 
-from ..errors import CopyUnavailable, WorkspaceExists
-from .driver import WorkspaceDriver
+from core.errors import CopyUnavailableError, WorkspaceExistsError
+
+from .base import WorkspaceDriver
 
 # Ceiling for the store, not its size on disk. The file is sparse: it measures
 # 0 bytes at creation and grows by itself as workspaces diverge, so this costs
@@ -81,6 +82,7 @@ from .driver import WorkspaceDriver
 # dependencies; realistically ~1 G). Override for a small disk; `df` inside the
 # store reports whatever is set here.
 STORE_SIZE = os.environ.get("WORKSPACE_STORE_SIZE", "16G")
+
 
 class BtrfsImage(WorkspaceDriver):
     """A single loop-mounted btrfs image; branches are subvolumes in it."""
@@ -102,7 +104,7 @@ class BtrfsImage(WorkspaceDriver):
         than starting over.
         """
         if not source.is_dir():
-            raise CopyUnavailable(f"no base app to copy in: {source}")
+            raise CopyUnavailableError(f"no base app to copy in: {source}")
         self.root.mkdir(parents=True, exist_ok=True)
 
         self._ensure_mounted()
@@ -139,7 +141,7 @@ class BtrfsImage(WorkspaceDriver):
         self._ensure_mounted()
         path = self.mount_root / folder
         if not path.is_dir():
-            raise CopyUnavailable(f"no such workspace: {folder}")
+            raise CopyUnavailableError(f"no such workspace: {folder}")
         return path
 
     def close(self, folder: str) -> None:
@@ -147,7 +149,7 @@ class BtrfsImage(WorkspaceDriver):
 
     # --- Not built yet ---
 
-    def destroy(self, folder: str) -> None:
+    def destroy(self, folder: str) -> None:  # noqa: V105 — required by the contract; nothing calls destroy() yet
         """
         TODO: BTRFS_IOC_SNAP_DESTROY_V2 on the subvolume.
 
@@ -190,7 +192,7 @@ class BtrfsImage(WorkspaceDriver):
             return
 
         if which("mkfs.btrfs") is None:
-            raise CopyUnavailable(
+            raise CopyUnavailableError(
                 "mkfs.btrfs is not installed — the workspace store is formatted "
                 "once on first run and needs it. Install btrfs-progs "
                 "(`apt install btrfs-progs`, `dnf install btrfs-progs`); it is "
@@ -206,7 +208,9 @@ class BtrfsImage(WorkspaceDriver):
             building.rename(self.store_image)
         except subprocess.CalledProcessError as exc:
             building.unlink(missing_ok=True)
-            raise CopyUnavailable(f"could not create the store image: {exc}") from exc
+            raise CopyUnavailableError(
+                f"could not create the store image: {exc}"
+            ) from exc
 
     def _ensure_mounted(self) -> None:
         """
@@ -224,7 +228,7 @@ class BtrfsImage(WorkspaceDriver):
         self.mount_root.mkdir(parents=True, exist_ok=True)
         if os.path.ismount(self.mount_root):
             if fstype(self.mount_root) != "btrfs":
-                raise CopyUnavailable(
+                raise CopyUnavailableError(
                     f"{self.mount_root} is mounted but is not btrfs — unmount it first"
                 )
             return
@@ -235,7 +239,7 @@ class BtrfsImage(WorkspaceDriver):
             text=True,
         )
         if proc.returncode != 0:
-            raise CopyUnavailable(
+            raise CopyUnavailableError(
                 f"could not mount the workspace store: {proc.stderr.strip()}\n"
                 f"    loop-mounting needs root once per boot. Either run:\n"
                 f"        sudo mount -o loop {self.store_image} {self.mount_root}\n"
@@ -247,9 +251,9 @@ class BtrfsImage(WorkspaceDriver):
     def _snapshot(self, source: Path, folder: str) -> Path:
         dest = self.mount_root / folder
         if dest.exists():
-            raise WorkspaceExists(str(dest))
+            raise WorkspaceExistsError(str(dest))
         if not source.is_dir():
-            raise CopyUnavailable(f"nothing to clone from: {source}")
+            raise CopyUnavailableError(f"nothing to clone from: {source}")
 
         snapshot(self.mount_root, source, folder)
         return dest
@@ -299,7 +303,7 @@ def _vol_ioctl(parent: Path, request: int, name: str, src_fd: int = 0) -> None:
     try:
         fcntl.ioctl(fd, request, args, True)
     except OSError as exc:
-        raise CopyUnavailable(f"btrfs ioctl for {name}: {exc.strerror}") from exc
+        raise CopyUnavailableError(f"btrfs ioctl for {name}: {exc.strerror}") from exc
     finally:
         os.close(fd)
 
@@ -337,6 +341,6 @@ def fstype(path: Path) -> str:
                 continue
             if len(mountpoint) > best_len:
                 best_type, best_len = (rest.split()[0] if rest else ""), len(mountpoint)
-    except (OSError, IndexError):
+    except OSError, IndexError:
         return ""
     return best_type

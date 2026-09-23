@@ -36,16 +36,17 @@ from openai_codex import (
 from openai_codex.types import TurnStatus
 from pydantic import ValidationError
 
-from ...errors import (
+from core.errors import (
     AppError,
-    AuthRejected,
+    AuthRejectedError,
     ConfigError,
-    QuotaExceeded,
-    TurnFailed,
-    TurnTimeout,
+    QuotaExceededError,
+    TurnFailedError,
+    TurnTimeoutError,
     UnknownAIError,
 )
-from ...utils import mentions, readable_duration
+from core.utils import mentions, readable_duration
+
 from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
 
 # Default location, at the backend root rather than beside this file — stored
@@ -68,13 +69,13 @@ def _classify(exc: Exception) -> AppError:
         return ConfigError(f"codex rejected our output schema: {message}")
 
     if mentions(message, "invalid_api_key", "unauthorized"):
-        return AuthRejected(message)
+        return AuthRejectedError(message)
 
     if mentions(message, "usage limit", "quota", "rate limit"):
-        return QuotaExceeded(message)
+        return QuotaExceededError(message)
 
     # unclassified turn failure
-    return TurnFailed(message)
+    return TurnFailedError(message)
 
 
 def _translate(exc: Exception) -> AppError:
@@ -91,7 +92,7 @@ def _translate(exc: Exception) -> AppError:
         return _classify(exc)
 
     if isinstance(exc, (ServerBusyError, TransportClosedError)):
-        return TurnFailed(f"{type(exc).__name__}: {exc}")
+        return TurnFailedError(f"{type(exc).__name__}: {exc}")
 
     if isinstance(exc, ValidationError):
         return UnknownAIError(f"unexpected response shape: {exc}")
@@ -133,7 +134,8 @@ class CodexProvider(Provider):
                 )
                 result = self._wait_for_result(handle)
         except AppError as exc:
-            raise self.tag(exc)
+            self.tag(exc)
+            raise
         except Exception as exc:
             raise self.tag(_translate(exc)) from exc
 
@@ -146,7 +148,7 @@ class CodexProvider(Provider):
         # edge case in case result was interrupted, don't want a false positive success
         if result.status != TurnStatus.completed:
             raise self.tag(
-                TurnFailed(f"turn ended as {result.status.value} (external)")
+                TurnFailedError(f"turn ended as {result.status.value} (external)")
             )
 
         return TurnOutcome(text=result.final_response or "", session_id=thread.id)
@@ -172,7 +174,7 @@ class CodexProvider(Provider):
             result = handle.run()
         except Exception:
             if expired.is_set():
-                raise TurnTimeout(
+                raise TurnTimeoutError(
                     f"no result after {readable_duration(self.timeout)} (watchdog)"
                 ) from None
             raise
@@ -180,7 +182,7 @@ class CodexProvider(Provider):
             watchdog.cancel()
 
         if expired.is_set():  # interrupted cleanly rather than by raising
-            raise TurnTimeout(
+            raise TurnTimeoutError(
                 f"no result after {readable_duration(self.timeout)} (watchdog)"
             )
         return result
@@ -234,7 +236,7 @@ class CodexProvider(Provider):
         lose the conversation history — never the work, which is on disk.
         """
         sandbox = Sandbox.read_only if read_only else Sandbox.workspace_write
-        options = dict(cwd=str(workspace), sandbox=sandbox)
+        options = {"cwd": str(workspace), "sandbox": sandbox}
         try:
             if fork_from:
                 return codex.thread_fork(fork_from, **options)

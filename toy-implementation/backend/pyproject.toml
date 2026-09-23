@@ -1,0 +1,131 @@
+[project]
+name = "rapid-prototyping-backend"
+version = "0.1.0"
+requires-python = ">=3.14"
+
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.1",
+    "python-dotenv==1.2.2",
+    "openai-codex==0.144.4",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.8",
+    "vulture>=2.16",
+    "mypy>=1.11",
+]
+
+[tool.uv]
+package = false
+
+# ---------------------------------------------------------------------------
+# Formatting and linting
+# ---------------------------------------------------------------------------
+[tool.ruff]
+extend-exclude = [".codex_home", "workspaces", "data"]
+
+[tool.ruff.lint]
+select = [
+    "F",      # unused imports, unused locals, redefinitions
+    "E4", "E7", "E9", "W",  # real pycodestyle errors; E5 (line length) is the formatter's job
+    "I",      # import sorting
+    "UP",     # outdated syntax for this Python version
+    "B",      # bugbear: silent-failure patterns
+    "C4",     # comprehension gunk
+    "SIM",    # collapsible branches, if/else that returns a bool
+    "RET",    # redundant else-after-return, unreachable returns
+    "PIE",    # unnecessary pass, duplicate class-field definitions
+    "PERF",   # loops that should be comprehensions
+    "ERA",    # commented-out code
+    "ARG",    # arguments nothing reads
+    "C90",    # cyclomatic complexity
+    "PGH",    # blanket noqa / blanket type-ignore — see dummy-variable-rgx below
+    "RUF",    # includes RUF100, noqa comments that no longer suppress anything
+    "PLR0911", "PLR0912", "PLR0915",  # too many returns / branches / statements
+    "TID252", # imports reaching into a parent package (`..`); siblings (`.`) stay fine
+    "N818",   # exception classes without the Error suffix
+    "PLC0415",# imports inside a function rather than at the top of the file
+]
+
+# Deliberately NOT enabled, each because it fights a decision already made here:
+#   TRY003  would demand an exception class per message; errors.py is built the other way
+#   S603/S607 subprocess — inherent to the cloning drivers
+#   E501    line length — ruff format owns this
+
+# Vulture's codes (V101-V201) appear in `# noqa` comments in this codebase.
+# Without this, RUF102 calls them invalid rule codes and -- because that rule is
+# auto-fixable -- `fix:backend` would delete the suppressions and break the
+# dead-code check.
+external = ["V"]
+
+# Only a bare `_` silences the unused-argument and unused-variable rules.
+# The default pattern also accepts `_foo`, which lets dead arguments survive by
+# being renamed instead of removed.
+dummy-variable-rgx = "^_$"
+
+[tool.ruff.lint.per-file-ignores]
+
+# FastAPI passes `request` to every exception handler whether or not the
+# handler reads it; the parameter is required by the framework's signature.
+"main.py" = ["ARG001"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+# ---------------------------------------------------------------------------
+# Dead code
+# ---------------------------------------------------------------------------
+[tool.vulture]
+paths = ["."]
+exclude = [".venv", "__pycache__", ".codex_home", "workspaces", "data"]
+min_confidence = 60
+# Registered by decorator and never called by name from Python.
+ignore_decorators = ["@app.*", "@router.*", "@field_validator", "@model_validator", "@validator"]
+# Assigned to, read by the library, never read by us. These three are naming
+# conventions that always mean the same thing, so they are ignored globally.
+# Anything else is suppressed at the line it happens on, with `# noqa: V1xx`
+# and a reason — see `grep -rn "noqa: V" .` for every one of them.
+ignore_names = ["model_config", "row_factory", "cls"]
+
+# ---------------------------------------------------------------------------
+# Type checking
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.14"
+files = ["."]
+exclude = '^(\.venv|workspaces|data|\.codex_home)/'
+
+# All five cost nothing on the code as it stands, so they are pure ratchets.
+# warn_unreachable is the one that catches dead branches ruff cannot see.
+warn_unreachable = true
+strict_equality = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Next ratchets to turn on, with what each costs today:
+#   disallow_untyped_defs  7 functions with no annotations
+#   warn_return_any        3 returns
+
+# Pre-existing findings, parked so the gate can start green. These are real and
+# worth fixing; nothing else in these files is exempt, and every other file is
+# checked for these codes. Remove an override and fix the file, one at a time.
+#
+#   db (3)                     return annotations disagree with what is returned
+#   core.pipelines (10)        db.get_feature returns `dict | None` and the
+#                              result is indexed without a None check
+#   core.ai.providers.codex (16)  a **dict[str, str] splatted into typed kwargs
+
+[[tool.mypy.overrides]]
+module = "db"
+disable_error_code = ["return-value"]
+
+[[tool.mypy.overrides]]
+module = "core.pipelines"
+disable_error_code = ["arg-type", "index"]
+
+[[tool.mypy.overrides]]
+module = "core.ai.providers.codex"
+disable_error_code = ["arg-type"]

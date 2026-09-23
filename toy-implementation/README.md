@@ -43,9 +43,8 @@ cp .env.example .env
 
 ```bash
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uv sync
+uv run uvicorn main:app --reload --port 8000
 ```
 
 **3. Frontend** (in another terminal).
@@ -57,6 +56,17 @@ npm run dev
 ```
 
 Open http://localhost:5173, type a feature, and click **Run feature**.
+
+**Checks.** Formatting, lint, types and dead code, the same four a push runs:
+
+```bash
+cd frontend
+npm run check:backend   # all four, read-only
+npm run fix:backend     # apply the fixable lint and formatting changes
+```
+
+A `pre-push` hook runs `check:backend` automatically. The `npm install` in step
+3 installs it; `git push --no-verify` skips it.
 
 ## Previewing a generated app
 

@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...errors import AppError
+from core.errors import AppError
 
 
 @dataclass

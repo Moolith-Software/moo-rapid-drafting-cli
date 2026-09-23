@@ -12,8 +12,8 @@ import sqlite3
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from core import errors, statuses
 
+from core import errors, statuses
 
 # The database lives next to this file, under data/.
 DB_PATH = Path(__file__).parent / "data" / "app.db"
@@ -36,7 +36,7 @@ def _session(*, write: bool = False):
         # belongs here and not next to the WAL pragma in init_db.
         conn.execute("PRAGMA foreign_keys = ON")
     except (OSError, sqlite3.Error) as exc:
-        raise errors.DatabaseUnavailable(f"{type(exc).__name__}: {exc}") from exc
+        raise errors.DatabaseUnavailableError(f"{type(exc).__name__}: {exc}") from exc
 
     try:
         if write:
@@ -193,7 +193,7 @@ def _claim_ready(
             },
         )
     ]
-    taken = list(zip(ready, feature_requests))
+    taken = list(zip(ready, feature_requests, strict=False))
     conn.executemany(
         """
         UPDATE features SET feature = :feature_request, status = :taken, progress = ''
@@ -358,7 +358,7 @@ def _normalize_summary(raw) -> dict:
         if isinstance(value, dict):
             return value
         return {"feature_title": "", "summary": str(value), "highlights": []}
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         return {"feature_title": "", "summary": raw or "", "highlights": []}
 
 

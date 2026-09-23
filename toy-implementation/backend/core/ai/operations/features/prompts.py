@@ -71,7 +71,7 @@ def prime() -> str:
     the point: prompt caches match from the start and stop at the first byte
     that differs, so warming anything else would warm the wrong thing.
     """
-    return f"{SYSTEM_PROMPT}\nRespond with {{\"understood\": true}}. Change nothing."
+    return f'{SYSTEM_PROMPT}\nRespond with {{"understood": true}}. Change nothing.'
 
 
 def refine(recap: str, user_request: str) -> str:

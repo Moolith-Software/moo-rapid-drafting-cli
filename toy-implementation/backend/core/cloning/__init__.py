@@ -1,7 +1,8 @@
 """
 Making a cheap copy of the app, one driver per operating system.
 
-    driver.py    the WorkspaceDriver contract and get_driver(). Start here.
+    base.py      the WorkspaceDriver contract every driver implements. Start here.
+    driver.py    get_driver(), which picks the driver for this machine
     macos.py     one sparse image per branch, cloned with clonefile(2)
     linux.py     one btrfs image holding every branch, mounted once. UNVERIFIED
     windows.py   undecided; a placeholder that can't be created yet
@@ -12,6 +13,7 @@ a path, so they are free. Callers pair open/close regardless and never learn
 which they are on.
 """
 
-from .driver import WorkspaceDriver, get_driver
+from .base import WorkspaceDriver
+from .driver import get_driver
 
 __all__ = ["WorkspaceDriver", "get_driver"]

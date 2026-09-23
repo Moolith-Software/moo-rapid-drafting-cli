@@ -125,7 +125,7 @@ def run_add(feature_id: int) -> None:
 
         # Deterministically check if any file actually changed, which is always expected
         if not file_changes:
-            raise errors.NoChanges(
+            raise errors.NoChangesError(
                 "the AI reported success for adding the feature, but no files changed"
             )
 
@@ -174,7 +174,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
         file_changes = changes.diff_snapshots(before, after)
 
         if not file_changes:
-            raise errors.NoChanges(
+            raise errors.NoChangesError(
                 "the refinement AI reported success but no files changed"
             )
 
@@ -215,11 +215,12 @@ def _append_refinement(
 ) -> list:
     """Add this refinement to the feature's history."""
     refinements = row["refinements"]
-    return refinements + [
+    return [
+        *refinements,
         {
             "refinement_id": len(refinements) + 1,
             "user_request": user_request,
             "file_changes": file_changes,
             "summary": result.summary,
-        }
+        },
     ]

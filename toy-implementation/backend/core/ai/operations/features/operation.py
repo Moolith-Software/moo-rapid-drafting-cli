@@ -2,12 +2,13 @@
 Have an AI build or refine a feature by editing a workspace.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
-from ....errors import AppError
-from ... import providers
+from core.ai import providers
+from core.errors import AppError
+
 from . import prompts, schemas
 
 
@@ -90,9 +91,10 @@ def _run(
     # A turn that did not finish has already raised, so reaching here means the
     # provider has something to show for it.
     #
-    # Raises BadOutput if the reply is not the shape we asked for
+    # Raises BadOutputError if the reply is not the shape we asked for
     try:
         summary = parse(outcome.text)
     except AppError as exc:
-        raise provider.tag(exc)
+        provider.tag(exc)
+        raise
     return FeatureResult(summary=summary, session_id=outcome.session_id)

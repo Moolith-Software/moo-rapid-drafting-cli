@@ -19,8 +19,9 @@ import subprocess
 import threading
 from pathlib import Path
 
-from ..errors import CopyUnavailable, WorkspaceExists
-from .driver import WorkspaceDriver
+from core.errors import CopyUnavailableError, WorkspaceExistsError
+
+from .base import WorkspaceDriver
 
 # Shipped uncompressed on purpose; see assets/README.md.
 PRISTINE = Path(__file__).parent / "assets" / "macos-pristine.sparseimage"
@@ -44,7 +45,7 @@ class SparseImages(WorkspaceDriver):
         if self.base_image.exists():
             return
         if not source.is_dir():
-            raise CopyUnavailable(f"no base app to copy in: {source}")
+            raise CopyUnavailableError(f"no base app to copy in: {source}")
         self.root.mkdir(parents=True, exist_ok=True)
 
         # Built under a temporary name, so a crash mid-copy can't leave a
@@ -86,7 +87,7 @@ class SparseImages(WorkspaceDriver):
         """Mount a branch's image, unless it already is, and return where."""
         image = self.root / f"{folder}.sparseimage"
         if not image.exists():
-            raise CopyUnavailable(f"no such workspace: {folder}")
+            raise CopyUnavailableError(f"no such workspace: {folder}")
         mount = self.mount_root / folder
         with self._lock:
             mount.mkdir(parents=True, exist_ok=True)
@@ -109,7 +110,7 @@ class SparseImages(WorkspaceDriver):
 
     # --- Not built yet ---
 
-    def destroy(self, folder: str) -> None:
+    def destroy(self, folder: str) -> None:  # noqa: V105 — required by the contract; nothing calls destroy() yet
         """
         TODO: unmount the branch, then delete its image.
 
@@ -122,7 +123,7 @@ class SparseImages(WorkspaceDriver):
     def _clone_pristine(self, dest: Path) -> None:
         """Clone the shipped pristine image to `dest`, ready to copy the app into."""
         if not PRISTINE.exists():
-            raise CopyUnavailable(f"shipped image missing: {PRISTINE}")
+            raise CopyUnavailableError(f"shipped image missing: {PRISTINE}")
         copy_on_write(PRISTINE, dest)  # needs the same APFS volume as workspaces/
         dest.chmod(0o644)
 
@@ -139,13 +140,13 @@ class SparseImages(WorkspaceDriver):
         """
         Clone the base or a branch into a new branch, and mount it.
 
-        Never replaces an existing branch: a taken name raises WorkspaceExists.
+        Never replaces an existing branch: a taken name raises WorkspaceExistsError.
         """
         dest = self.root / f"{folder}.sparseimage"
         if dest.exists():
-            raise WorkspaceExists(str(dest))
+            raise WorkspaceExistsError(str(dest))
         if not source.exists():
-            raise CopyUnavailable(f"nothing to clone from: {source}")
+            raise CopyUnavailableError(f"nothing to clone from: {source}")
 
         # The source may be mounted with writes still in memory; sync flushes
         # them. It can't help if something is still writing, so callers clone a
@@ -168,7 +169,7 @@ class SparseImages(WorkspaceDriver):
         if os.path.ismount(mount):
             try:
                 run_hdiutil("detach", str(mount), "-quiet")
-            except CopyUnavailable:
+            except CopyUnavailableError:
                 run_hdiutil("detach", str(mount), "-force", "-quiet")
         shutil.rmtree(mount, ignore_errors=True)
 
@@ -182,7 +183,7 @@ _libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
 def copy_on_write(source: Path, dest: Path) -> None:
     """Clone `source` to `dest` without copying its data, or raise saying why not."""
     if _libc.clonefile(bytes(source), bytes(dest), 0) != 0:
-        raise CopyUnavailable(f"{dest}: {os.strerror(ctypes.get_errno())}")
+        raise CopyUnavailableError(f"{dest}: {os.strerror(ctypes.get_errno())}")
 
 
 def copy_directory(source: Path, dest: Path) -> None:
@@ -193,7 +194,7 @@ def copy_directory(source: Path, dest: Path) -> None:
     )
     if proc.returncode != 0:
         detail = proc.stderr.strip().splitlines()
-        raise CopyUnavailable(
+        raise CopyUnavailableError(
             f"copying {source}: {detail[-1] if detail else proc.returncode}"
         )
 
@@ -203,7 +204,7 @@ def run_hdiutil(*args: str) -> str:
     proc = subprocess.run(["hdiutil", *args], capture_output=True, text=True)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout).strip().splitlines()
-        raise CopyUnavailable(
+        raise CopyUnavailableError(
             f"hdiutil {args[0]}: {detail[-1] if detail else proc.returncode}"
         )
     return proc.stdout

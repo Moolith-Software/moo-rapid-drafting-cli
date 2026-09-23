@@ -36,7 +36,7 @@ Question 2 needs real Windows 11 Home.
 #BLACKBOX-NEEDS_REVIEW
 """
 
-from .driver import WorkspaceDriver
+from .base import WorkspaceDriver
 
 
 class VirtualDisks(WorkspaceDriver):

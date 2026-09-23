@@ -38,7 +38,7 @@ def diff_snapshots(before: dict, after: dict) -> list[dict]:
             changes.append({"path": path, "kind": "created"})
         elif before[path] != digest:
             changes.append({"path": path, "kind": "edited"})
-    for path in before:
-        if path not in after:
-            changes.append({"path": path, "kind": "deleted"})
+    changes.extend(
+        {"path": path, "kind": "deleted"} for path in before if path not in after
+    )
     return sorted(changes, key=lambda c: c["path"])
