@@ -31,7 +31,10 @@ from openai_codex import (
     InvalidRequestError,
     Sandbox,
     ServerBusyError,
+    Thread,
     TransportClosedError,
+    TurnHandle,
+    TurnResult,
 )
 from openai_codex.types import TurnStatus
 from pydantic import ValidationError
@@ -153,7 +156,7 @@ class CodexProvider(Provider):
 
         return TurnOutcome(text=result.final_response or "", session_id=thread.id)
 
-    def _wait_for_result(self, handle):
+    def _wait_for_result(self, handle: TurnHandle) -> TurnResult:
         """
         Wait for the turn, interrupting it if it outruns `self.timeout`.
 
@@ -227,7 +230,7 @@ class CodexProvider(Provider):
         session_id: str | None,
         fork_from: str | None,
         read_only: bool = False,
-    ):
+    ) -> Thread:
         """
         Branch, continue, or start a conversation — see the module docstring.
 

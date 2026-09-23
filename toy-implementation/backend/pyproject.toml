@@ -47,6 +47,11 @@ select = [
     "TID252", # imports reaching into a parent package (`..`); siblings (`.`) stay fine
     "N818",   # exception classes without the Error suffix
     "PLC0415",# imports inside a function rather than at the top of the file
+    "BLE001", # `except Exception` that swallows the error instead of re-raising
+    "TRY002", "TRY201",  # vague `raise Exception(...)`; `raise exc` where bare `raise` belongs
+    "PLR0913", "PLR2004",  # too many arguments; bare numbers in comparisons
+    "S101", "S105", "S307", "S602",  # assert as a real check, hardcoded secrets, eval(), shell=True
+    "ASYNC210", "ASYNC212", "ASYNC230", "ASYNC251",  # blocking HTTP, file I/O or sleep inside async
 ]
 
 # Deliberately NOT enabled, each because it fights a decision already made here:
@@ -73,6 +78,12 @@ dummy-variable-rgx = "^_$"
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+[tool.ruff.lint.pylint]
+# Default is 5, which the AI provider signatures exceed on purpose -- run_turn
+# takes 6 and the feature operation takes 7. This is set to catch a function
+# that has genuinely become a dumping ground, not a wide interface.
+max-args = 10
 
 # ---------------------------------------------------------------------------
 # Dead code
@@ -105,9 +116,11 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 
-# Next ratchets to turn on, with what each costs today:
-#   disallow_untyped_defs  7 functions with no annotations
-#   warn_return_any        3 returns
+# Every function must be annotated, and a function that annotates some of its
+# parameters must annotate all of them.
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_return_any = true
 
 # Pre-existing findings, parked so the gate can start green. These are real and
 # worth fixing; nothing else in these files is exempt, and every other file is

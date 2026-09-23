@@ -10,8 +10,10 @@ beats cleverness.
 import json
 import sqlite3
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from core import errors, statuses
 
@@ -23,7 +25,7 @@ DB_PATH = Path(__file__).parent / "data" / "app.db"
 
 
 @contextmanager
-def _session(*, write: bool = False):
+def _session(*, write: bool = False) -> Iterator[sqlite3.Connection]:
     """
     One connection, one transaction, always closed — and the single place a
     storage failure becomes an AppError.
@@ -280,7 +282,7 @@ def bump_workspace_version(feature_id: int) -> None:
         )
 
 
-def update_feature(feature_id: int, **fields) -> None:
+def update_feature(feature_id: int, **fields: Any) -> None:
     """
     Patch arbitrary columns on a feature. JSON columns are encoded automatically,
     so callers can pass Python lists/dicts directly.
@@ -328,7 +330,7 @@ def count_children(feature_id: int) -> int:
             """,
             {"feature_id": feature_id, "failed": statuses.FAILED},
         ).fetchone()
-    return row["branched"]
+    return int(row["branched"])
 
 
 def list_features() -> list[dict]:
@@ -346,7 +348,7 @@ def list_features() -> list[dict]:
 _JSON_COLUMNS = ("file_changes", "refinements", "summary")
 
 
-def _normalize_summary(raw) -> dict:
+def _normalize_summary(raw: Any) -> dict:
     """
     Decode the summary column into a FeatureSummary-shaped dict, tolerating old
     rows that stored a plain string (or empty) before we moved to structured JSON.

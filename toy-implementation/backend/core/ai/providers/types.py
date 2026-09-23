@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.errors import AppError
+from core.errors import AI_BAND, AppError
 
 
 @dataclass
@@ -60,7 +60,7 @@ class Provider(ABC):
         raised after the turn returns, by which point the provider is no longer
         the one holding the error.
         """
-        if not 2000 <= error.code < 3000:
+        if error.code not in AI_BAND:
             return error
 
         error.title = f"{self.tags} {error.title}"

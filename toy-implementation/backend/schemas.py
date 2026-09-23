@@ -2,7 +2,7 @@
 API Contracts
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
@@ -43,7 +43,7 @@ class AddBody(BaseModel):
         json_schema_input_type=Request | RequestBatch,
     )
     @classmethod
-    def _wrap_single(cls, value):
+    def _wrap_single(cls, value: Any) -> Any:
         """
         Accept one request as a bare string and make it an array of one
         """

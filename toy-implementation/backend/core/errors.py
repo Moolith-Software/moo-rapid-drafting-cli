@@ -19,6 +19,9 @@ Note: All exceptions have an "error" suffix for one taxonomy, even where the nam
 
 import traceback
 
+# The 2xxx band above: the errors a provider owns and may tag with its name.
+AI_BAND = range(2000, 3000)
+
 
 class AppError(Exception):
     """

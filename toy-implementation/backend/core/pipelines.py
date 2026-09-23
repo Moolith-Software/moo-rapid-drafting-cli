@@ -41,9 +41,7 @@ def preload_environment(parent_id: int | None = None) -> None:
     """
     try:
         feature_id = db.create_feature(parent_id=parent_id)
-    except Exception as exc:
-        # Nobody is waiting on this one, so there is no row and no caller to
-        # tell. The log is the only record. `wrap` is what writes it.
+    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
         errors.wrap(exc)
         return
     build_environment(feature_id)
@@ -84,7 +82,7 @@ def build_environment(feature_id: int) -> dict | None:
             f"{time.monotonic() - started:.2f}s",
             flush=True,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
         db.update_feature(
             feature_id,
             status=statuses.FAILED,
@@ -138,7 +136,7 @@ def run_add(feature_id: int) -> None:
             progress="Done.",
         )
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
         db.update_feature(
             feature_id,
             status=statuses.FAILED,
@@ -186,7 +184,7 @@ def run_refine(feature_id: int, user_request: str) -> None:
             progress="Done.",
         )
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — worker thread boundary; no caller left to raise to
         db.update_feature(
             feature_id,
             status=statuses.FAILED,
@@ -211,7 +209,10 @@ def _recap(row: dict) -> str:
 
 
 def _append_refinement(
-    row: dict, user_request: str, file_changes: list, result
+    row: dict,
+    user_request: str,
+    file_changes: list,
+    result: feature_ai.FeatureResult,
 ) -> list:
     """Add this refinement to the feature's history."""
     refinements = row["refinements"]
