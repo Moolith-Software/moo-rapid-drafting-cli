@@ -21,4 +21,4 @@ FAILED = "failed"
 
 # Still in flight, from the frontend's side: queued, initializing, building,
 # refining. The frontend keeps its own copy of this list and it has drifted.
-# ACTIVE = (QUEUED, INITIALIZING, BUILDING, REFINING)
+# ACTIVE = (QUEUED, INITIALIZING, BUILDING, REFINING)  # noqa: ERA001
