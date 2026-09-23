@@ -47,6 +47,14 @@ uv sync
 uv run uvicorn main:app --reload --port 8000
 ```
 
+The backend runs as production unless `ENV=development` is set or set in
+your local `.env` to get `/docs`. In production, leave out the env var, it will run as prod by default. Keep it to one worker: the job pools, preview servers and the startup workspace 
+sweep all live in the process.  A second worker would create conflicts.
+
+```bash
+uv run uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
 **3. Frontend** (in another terminal).
 
 ```bash

@@ -16,6 +16,7 @@ Endpoints split by what they do to the world.
     GET  /features/{id}/status       just the fields the frontend polls
 """
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -34,6 +35,13 @@ from core import workspace_manager as workspaces
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
 
+# key environment configus
+# Production unless ENV is explicitly "development" (or "dev"), so a server that
+# forgets or misspells ENV still hides the docs.
+ENV = os.environ.get("ENV", "production").lower()
+IS_PRODUCTION = ENV not in ("development", "dev")
+DEBUG = not IS_PRODUCTION
+
 # Basic Pool config sizes
 MAX_CONCURRENT_TURNS = 16
 MAX_CONCURRENT_PRELOADS = 8
@@ -44,7 +52,22 @@ _PRELOAD_POOL = ThreadPoolExecutor(
 )
 
 
-app = FastAPI(title="Rapid Prototyping Tool")
+if IS_PRODUCTION:
+    app = FastAPI(
+        title="Rapid Prototyping Tool",
+        debug=DEBUG,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+else:
+    app = FastAPI(
+        title="Rapid Prototyping Tool",
+        debug=DEBUG,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+    )
 
 # The Vue dev server runs on a different port, so allow cross-origin calls.
 app.add_middleware(
