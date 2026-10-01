@@ -62,7 +62,7 @@ class Workspaces:
 @dataclass(frozen=True)
 class Settings:
     # TODO: implement default project_id, update relevant endpoints to use it when set
-    default_project_id: int | None = None
+    default_project_id: int | None = None  # noqa: V107 - nothing reads it until projects exist; see the TODO above
     ai_code_changes: AICodeChanges = field(default_factory=AICodeChanges)
     concurrency: Concurrency = field(default_factory=Concurrency)
     paths: Paths = field(default_factory=Paths)

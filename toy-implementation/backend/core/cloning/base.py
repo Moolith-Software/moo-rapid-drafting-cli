@@ -19,13 +19,13 @@ class SpaceUsed:
 
     # What the files report, adding up shared data once per file that shares
     # it. A fresh clone looks as big as what it was cloned from.
-    logical_mb: float
+    logical_mb: float  # noqa: V107 - filled by space_used()
     # What the disk actually spends: shared data counted once.
     actual_mb: float
     # The whole filesystem the folder sits on, not just our share of it.
-    filesystem_capacity_mb: float
-    filesystem_used_mb: float
-    filesystem_free_mb: float
+    filesystem_capacity_mb: float  # noqa: V107 - filled by space_used()
+    filesystem_used_mb: float  # noqa: V107 - filled by space_used()
+    filesystem_free_mb: float  # noqa: V107 - filled by space_used()
 
 
 class WorkspaceDriver(ABC):

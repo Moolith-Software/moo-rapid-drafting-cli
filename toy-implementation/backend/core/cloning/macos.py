@@ -238,7 +238,7 @@ def private_size(path: Path) -> int:
         != 0
     ):
         raise CopyUnavailableError(f"{path}: {os.strerror(ctypes.get_errno())}")
-    return struct.unpack_from("q", buf, 4)[0]
+    return int(struct.unpack_from("q", buf, 4)[0])
 
 
 def copy_directory(source: Path, dest: Path) -> None:
