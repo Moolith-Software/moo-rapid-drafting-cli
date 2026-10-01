@@ -15,6 +15,7 @@ Branching clones a single image file, however many files are inside it, and
 import ctypes
 import os
 import shutil
+import struct
 import subprocess
 import threading
 from pathlib import Path
@@ -108,6 +109,22 @@ class SparseImages(WorkspaceDriver):
         with self._lock:
             self._detach(folder)
 
+    # --- Space ---
+
+    def workspace_size_bytes(self) -> tuple[int, int]:
+        """
+        Logical: every image's allocated size, so each branch counts the base again.
+        Actual: the base once, plus only what each branch wrote on top of it.
+        """
+        images = list(self.root.glob("*.sparseimage"))
+        logical = sum(image.stat().st_blocks * 512 for image in images)
+        actual = sum(
+            private_size(image) for image in images if image != self.base_image
+        )
+        if self.base_image.exists():
+            actual += self.base_image.stat().st_blocks * 512
+        return logical, actual
+
     # --- Not built yet ---
 
     def destroy(self, folder: str) -> None:  # noqa: V105 - required by the contract; nothing calls destroy() yet
@@ -184,6 +201,44 @@ def copy_on_write(source: Path, dest: Path) -> None:
     """Clone `source` to `dest` without copying its data, or raise saying why not."""
     if _libc.clonefile(bytes(source), bytes(dest), 0) != 0:
         raise CopyUnavailableError(f"{dest}: {os.strerror(ctypes.get_errno())}")
+
+
+class _AttrList(ctypes.Structure):
+    """struct attrlist from <sys/attr.h>."""
+
+    _fields_ = [
+        ("bitmapcount", ctypes.c_ushort),
+        ("reserved", ctypes.c_uint16),
+        ("commonattr", ctypes.c_uint32),
+        ("volattr", ctypes.c_uint32),
+        ("dirattr", ctypes.c_uint32),
+        ("fileattr", ctypes.c_uint32),
+        ("forkattr", ctypes.c_uint32),
+    ]
+
+
+_ATTR_BIT_MAP_COUNT = 5
+_ATTR_CMNEXT_PRIVATESIZE = 0x8  # requested in forkattr, under the option below
+_FSOPT_ATTR_CMN_EXTENDED = 0x20
+
+
+def private_size(path: Path) -> int:
+    """
+    Bytes of `path` no other file shares, via getattrlist(2).
+
+    A fresh clone reports 0; writing 5 MB into it makes both it and its
+    source report 5 MB, since each now holds 5 MB the other does not.
+    """
+    attrs = _AttrList(_ATTR_BIT_MAP_COUNT, 0, 0, 0, 0, 0, _ATTR_CMNEXT_PRIVATESIZE)
+    buf = ctypes.create_string_buffer(16)  # u_int32 length, then off_t
+    if (
+        _libc.getattrlist(
+            bytes(path), ctypes.byref(attrs), buf, len(buf), _FSOPT_ATTR_CMN_EXTENDED
+        )
+        != 0
+    ):
+        raise CopyUnavailableError(f"{path}: {os.strerror(ctypes.get_errno())}")
+    return struct.unpack_from("q", buf, 4)[0]
 
 
 def copy_directory(source: Path, dest: Path) -> None:

@@ -8,16 +8,18 @@ the database, or the AI.
 import uuid
 from pathlib import Path
 
-from constants.paths import BACKEND_DIR
+from core.errors import WorkspaceStorageFullError
+from settings import SETTINGS
 
+from .base import SpaceUsed
 from .driver import get_driver
 
-SOURCE_APP_DIR = BACKEND_DIR.parent / "base"  # the app build_base() copies in
-WORKSPACES_DIR = BACKEND_DIR / "workspaces"
+# The app build_base() copies in; ships with the code, so it is found from here.
+SOURCE_APP_DIR = Path(__file__).resolve().parents[3] / "base"
 
 # Chosen once, by platform. Raises here rather than at the first clone, so an
 # unsupported host fails at startup with a reason instead of mid-feature.
-_driver = get_driver(WORKSPACES_DIR)
+_driver = get_driver(SETTINGS.paths.workspaces_dir)
 
 
 def driver_name() -> str:
@@ -59,17 +61,40 @@ def sweep() -> int:
     return _driver.sweep()
 
 
+def space_used() -> SpaceUsed:
+    """The workspaces folder's logical and actual size, and its filesystem's, in MB."""
+    return _driver.space_used()
+
+
 """ Core cloning functions """
 
 
 def clone_base(folder_name: str) -> Path:
     """CoW-clone the base into a new branch named <folder_name>, opened."""
+    _ensure_room()
     return _driver.clone_base(folder_name)
 
 
 def clone_from(source_folder: str, folder_name: str) -> Path:
     """CoW-clone an existing workspace (e.g. a parent feature) into a new one."""
+    _ensure_room()
     return _driver.clone_from(source_folder, folder_name)
+
+
+def _ensure_room() -> None:
+    """
+    Refuse a new workspace once the folder is already over max_size_gb.
+
+    Only stops new clones: a turn already running may still push it past.
+    """
+    limit_gb = SETTINGS.workspaces.max_size_gb
+    used_gb = _driver.space_used().actual_mb / 1024
+    if used_gb >= limit_gb:
+        raise WorkspaceStorageFullError(
+            f"{used_gb:,.2f} GB used of the {limit_gb:,.2f} GB limit in "
+            f"{SETTINGS.paths.workspaces_dir}. Raise settings.workspaces.max_size_gb "
+            f"to allow more, or delete workspaces to free space."
+        )
 
 
 """ Using a workspace """

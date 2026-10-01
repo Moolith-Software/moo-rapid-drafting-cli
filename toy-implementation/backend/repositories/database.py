@@ -8,15 +8,16 @@ one; this file only opens connections and brings the schema up to date.
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
-from constants.paths import BACKEND_DIR
 from core import errors
+from settings import SETTINGS
 
-# The database lives under backend/data/.
-DB_PATH = BACKEND_DIR / "data" / "app.db"
+DB_PATH = SETTINGS.paths.app_data_dir / "data" / "app.db"
 
 # Numbered .sql files, applied in order: 0001_create_features.sql, 0002_...
-MIGRATIONS_DIR = BACKEND_DIR / "migrations"
+# TODO: will need to be updated later
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
 @contextmanager

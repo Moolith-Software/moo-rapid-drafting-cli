@@ -147,6 +147,31 @@ class BtrfsImage(WorkspaceDriver):
     def close(self, folder: str) -> None:
         """Nothing to release - the store stays mounted for the whole run."""
 
+    # --- Space ---
+
+    def workspace_size_bytes(self) -> tuple[int, int]:
+        """
+        Logical walks every file in every subvolume, so it costs O(files).
+
+        Actual is the store image's allocated size: one file holds every
+        branch, so its size already counts shared data once. On a btrfs host
+        there is no image, and telling shared from unshared needs quotas
+        (btrfs-progs at runtime), so actual falls back to logical there and
+        overcounts.
+        """
+        logical = 0
+        if self.mount_root.is_dir():
+            for folder, _, files in os.walk(self.mount_root):
+                for name in files:
+                    logical += os.lstat(os.path.join(folder, name)).st_blocks * 512
+        # TODO: real actual on a btrfs host, via qgroups or `btrfs filesystem du`.
+        actual = (
+            self.store_image.stat().st_blocks * 512
+            if self.store_image.exists()
+            else logical
+        )
+        return logical, actual
+
     # --- Not built yet ---
 
     def destroy(self, folder: str) -> None:  # noqa: V105 - required by the contract; nothing calls destroy() yet

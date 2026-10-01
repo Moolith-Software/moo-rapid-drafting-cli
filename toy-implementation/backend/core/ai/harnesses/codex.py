@@ -40,7 +40,6 @@ from openai_codex import (
 from openai_codex.types import TurnStatus
 from pydantic import ValidationError
 
-from constants.paths import BACKEND_DIR
 from core.errors import (
     AppError,
     AuthRejectedError,
@@ -51,16 +50,13 @@ from core.errors import (
     UnknownAIError,
 )
 from core.utils import mentions, readable_duration
+from settings import SETTINGS
 
 from .types import MAX_TURN_TIMEOUT, Harness, HarnessName, TurnOutcome
 
-# Default location, at the backend root rather than beside this file - stored
+# Default location, in the app data folder rather than beside this file - stored
 # session ids point into it, so it must not move when this module does.
-CODEX_HOME = BACKEND_DIR / ".codex_home"
-
-# How hard the model should think. Every harness names these differently,
-# > gpt-5.6 rejects the SDK's "minimal" and accepts a "max" the SDK's enum does not list
-REASONING_EFFORT = "medium"  # none | low | medium | high | xhigh
+CODEX_HOME = SETTINGS.paths.app_data_dir / ".codex_home"
 
 
 def _classify(exc: Exception) -> AppError:
@@ -113,9 +109,11 @@ class CodexHarness(Harness):
         api_key: str,
         model: str | None = None,
         timeout: float = MAX_TURN_TIMEOUT,
+        reasoning_effort: str = "medium",
     ):
         super().__init__(model=model, timeout=timeout)
         self.api_key = api_key
+        self.reasoning_effort = reasoning_effort  # see settings.py for the values
 
     def run_turn(
         self,
@@ -132,7 +130,7 @@ class CodexHarness(Harness):
                     prompt,
                     output_schema=output_schema,
                     model=self.model,
-                    effort=REASONING_EFFORT,
+                    effort=self.reasoning_effort,
                 )
                 result = self._wait_for_result(handle)
         except AppError as exc:

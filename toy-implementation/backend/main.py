@@ -31,6 +31,7 @@ import schemas
 from core import errors, pipelines
 from core.cloning import workspaces
 from repositories import database, features
+from settings import SETTINGS
 
 # Load backend/.env so OPENAI_API_KEY is available to the Codex subprocess.
 load_dotenv(Path(__file__).parent / ".env")
@@ -42,13 +43,12 @@ ENV = os.environ.get("ENV", "production").lower()
 IS_PRODUCTION = ENV not in ("development", "dev")
 DEBUG = not IS_PRODUCTION
 
-# Basic Pool config sizes
-MAX_CONCURRENT_TURNS = 16
-MAX_CONCURRENT_PRELOADS = 8
 
-_FEATURE_POOL = ThreadPoolExecutor(MAX_CONCURRENT_TURNS, thread_name_prefix="feature")
+_FEATURE_POOL = ThreadPoolExecutor(
+    SETTINGS.concurrency.max_parallel_features, thread_name_prefix="feature"
+)
 _PRELOAD_POOL = ThreadPoolExecutor(
-    MAX_CONCURRENT_PRELOADS, thread_name_prefix="preload"
+    SETTINGS.concurrency.max_parallel_preloads, thread_name_prefix="preload"
 )
 
 

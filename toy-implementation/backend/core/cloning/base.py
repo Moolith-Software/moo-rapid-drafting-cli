@@ -7,8 +7,25 @@ from this package, driver.py and the three drivers import base.py, and nothing
 points back the other way.
 """
 
+import shutil
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class SpaceUsed:
+    """The workspaces folder, and the filesystem it sits on, in MB."""
+
+    # What the files report, adding up shared data once per file that shares
+    # it. A fresh clone looks as big as what it was cloned from.
+    logical_mb: float
+    # What the disk actually spends: shared data counted once.
+    actual_mb: float
+    # The whole filesystem the folder sits on, not just our share of it.
+    filesystem_capacity_mb: float
+    filesystem_used_mb: float
+    filesystem_free_mb: float
 
 
 class WorkspaceDriver(ABC):
@@ -68,6 +85,29 @@ class WorkspaceDriver(ABC):
     @abstractmethod
     def close(self, folder: str) -> None:
         """Release a branch opened by `open`. Its files survive."""
+
+    # --- Space ---
+
+    def space_used(self) -> SpaceUsed:
+        """The folder's logical and actual size, and its filesystem's, in MB."""
+        logical, actual = self.workspace_size_bytes()
+        # The folder may not exist before the base is built; its parent does.
+        disk = shutil.disk_usage(self.root if self.root.exists() else self.root.parent)
+
+        def mb(n: int) -> float:
+            return round(n / (1024 * 1024), 2)
+
+        return SpaceUsed(
+            logical_mb=mb(logical),
+            actual_mb=mb(actual),
+            filesystem_capacity_mb=mb(disk.total),
+            filesystem_used_mb=mb(disk.used),
+            filesystem_free_mb=mb(disk.free),
+        )
+
+    @abstractmethod
+    def workspace_size_bytes(self) -> tuple[int, int]:
+        """(logical, actual) bytes used by the whole workspaces folder."""
 
     # --- Not built yet ---
 

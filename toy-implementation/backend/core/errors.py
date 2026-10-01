@@ -59,6 +59,11 @@ class CopyUnavailableError(AppError):
     title = "Copy-on-write unavailable"
 
 
+class WorkspaceStorageFullError(AppError):
+    code = 1002
+    title = "Workspace storage full"
+
+
 class ConfigError(AppError):
     code = 2000
     title = "AI not configured"
