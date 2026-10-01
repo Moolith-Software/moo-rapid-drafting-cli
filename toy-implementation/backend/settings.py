@@ -58,6 +58,9 @@ class Workspaces:
     # is created. A turn already running may still push it past.
     max_size_gb: int = 16
 
+    # TODO: not wired in yet, mainly impacts vite_server previews.  Mounts might be 10mb each.
+    max_ram_usage_gb: int = 4  # noqa: V107 - not wired in yet; see the TODO above
+
 
 @dataclass(frozen=True)
 class Settings:
