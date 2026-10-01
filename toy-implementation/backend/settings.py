@@ -33,6 +33,10 @@ class Concurrency:
     max_parallel_features: int = 16
     max_parallel_preloads: int = 8
 
+    # TODO: not wired in yet. Caps RAM across everything running at once: preview
+    # dev servers (likely the most), AI turns (not measured yet), and mounts (~10 MB each).
+    max_ram_usage_gb: int = 4  # noqa: V107 - not wired in yet; see the TODO above
+
 
 @dataclass(frozen=True)
 class Paths:
@@ -57,9 +61,6 @@ class Workspaces:
     # Once the workspaces folder is already over this size, no new workspace
     # is created. A turn already running may still push it past.
     max_size_gb: int = 16
-
-    # TODO: not wired in yet, mainly impacts vite_server previews.  Mounts might be 10mb each.
-    max_ram_usage_gb: int = 4  # noqa: V107 - not wired in yet; see the TODO above
 
 
 @dataclass(frozen=True)
