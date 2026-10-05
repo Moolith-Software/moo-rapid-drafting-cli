@@ -17,7 +17,7 @@ from .driver import get_driver
 # The app build_base() copies in; ships with the code, so it is found from here.
 SOURCE_APP_DIR = Path(__file__).resolve().parents[3] / "base"
 
-# Chosen once, by platform. Raises here rather than at the first clone, so an
+# Chosen once, from STATE.os. Raises here rather than at the first clone, so an
 # unsupported host fails at startup with a reason instead of mid-feature.
 _driver = get_driver(SETTINGS.paths.workspaces_dir)
 

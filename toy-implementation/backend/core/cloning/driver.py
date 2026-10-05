@@ -2,10 +2,10 @@
 How this machine's cloning driver is picked.
 """
 
-import sys
 from pathlib import Path
 
 from core.errors import CopyUnavailableError
+from state import STATE
 
 from .base import WorkspaceDriver
 
@@ -18,14 +18,15 @@ def get_driver(root: Path) -> WorkspaceDriver:
     result for the life of the app.
     """
     # Imported per platform rather than at the top, since they contain incompatible imports
-    if sys.platform == "darwin":
+    driver_class: type[WorkspaceDriver]
+    if STATE.os.is_macos:
         from .macos import SparseImages as driver_class  # noqa: PLC0415
-    elif sys.platform.startswith("linux"):
+    elif STATE.os.is_linux:
         from .linux import BtrfsImage as driver_class  # noqa: PLC0415
-    elif sys.platform == "win32":
+    elif STATE.os.is_windows:
         from .windows import VirtualDisks as driver_class  # noqa: PLC0415
     else:
-        raise CopyUnavailableError(f"no copy-on-write driver for {sys.platform}")
+        raise CopyUnavailableError(f"no copy-on-write driver for {STATE.os.platform}")
 
     try:
         return driver_class(root)
