@@ -1,20 +1,21 @@
 """
-The OpenAI Codex provider.
+The OpenAI Codex harness.
 
 Codex does the real work: it reads the codebase, decides which files matter, and
 writes edits directly to disk. We hand it a workspace and a prompt, and get back
 one turn's result.
 
 A *turn* is one input and its complete result. Inside a single turn the agent may
-make dozens of model and tool calls — reading files, editing, checking the build
-— until it decides it is done.
+make dozens of model and tool calls - reading files, editing, checking the build
+- until it decides it is done.
 
-A *thread* is a conversation that remembers previous turns. Which one we open
-mirrors our feature tree:
+A *thread* is a conversation that remembers previous turns. Which one we open:
 
-    new feature   -> thread_start                 fresh session
-    child feature -> thread_fork(parent_session)  branch; parent left untouched
-    refinement    -> thread_resume(own_session)   linear continuation
+    no session yet    -> thread_start                fresh session
+    a stored session  -> thread_resume(session_id)   linear continuation
+
+A child feature gets its parent's code, not its conversation: its warm-up
+turn starts a fresh thread like any other environment.
 
 Auth lives in a project-local CODEX_HOME so Codex never picks up a stale global
 `codex login`. That folder also stores the session files our session ids point
@@ -31,30 +32,31 @@ from openai_codex import (
     InvalidRequestError,
     Sandbox,
     ServerBusyError,
+    Thread,
     TransportClosedError,
+    TurnHandle,
+    TurnResult,
 )
 from openai_codex.types import TurnStatus
 from pydantic import ValidationError
 
-from ...errors import (
+from core.errors import (
     AppError,
-    AuthRejected,
+    AuthRejectedError,
     ConfigError,
-    QuotaExceeded,
-    TurnFailed,
-    TurnTimeout,
+    QuotaExceededError,
+    TurnFailedError,
+    TurnTimeoutError,
     UnknownAIError,
 )
-from ...utils import mentions, readable_duration
-from .types import MAX_TURN_TIMEOUT, Provider, TurnOutcome
+from core.utils import mentions, readable_duration
+from settings import SETTINGS
 
-# Default location, at the backend root rather than beside this file — stored
+from .types import MAX_TURN_TIMEOUT, Harness, HarnessName, TurnOutcome
+
+# Default location, in the app data folder rather than beside this file - stored
 # session ids point into it, so it must not move when this module does.
-CODEX_HOME = Path(__file__).resolve().parents[3] / ".codex_home"
-
-# How hard the model should think. Every provider names these differently,
-# > gpt-5.6 rejects the SDK's "minimal" and accepts a "max" the SDK's enum does not list
-REASONING_EFFORT = "medium"  # none | low | medium | high | xhigh
+CODEX_HOME = SETTINGS.paths.app_data_dir / ".codex_home"
 
 
 def _classify(exc: Exception) -> AppError:
@@ -68,20 +70,20 @@ def _classify(exc: Exception) -> AppError:
         return ConfigError(f"codex rejected our output schema: {message}")
 
     if mentions(message, "invalid_api_key", "unauthorized"):
-        return AuthRejected(message)
+        return AuthRejectedError(message)
 
     if mentions(message, "usage limit", "quota", "rate limit"):
-        return QuotaExceeded(message)
+        return QuotaExceededError(message)
 
     # unclassified turn failure
-    return TurnFailed(message)
+    return TurnFailedError(message)
 
 
 def _translate(exc: Exception) -> AppError:
     """
     Turn anything the SDK throws into one of our codes, ordered by precedence.
 
-    A turn can die for perfectly ordinary reasons - the provider was
+    A turn can die for perfectly ordinary reasons - the server was
     busy, the subprocess went away - and that is still considered a failed run
 
     The last case is deliberately open: anything unrecognised, a bug of our own
@@ -91,7 +93,7 @@ def _translate(exc: Exception) -> AppError:
         return _classify(exc)
 
     if isinstance(exc, (ServerBusyError, TransportClosedError)):
-        return TurnFailed(f"{type(exc).__name__}: {exc}")
+        return TurnFailedError(f"{type(exc).__name__}: {exc}")
 
     if isinstance(exc, ValidationError):
         return UnknownAIError(f"unexpected response shape: {exc}")
@@ -99,17 +101,19 @@ def _translate(exc: Exception) -> AppError:
     return UnknownAIError(f"{type(exc).__name__}: {exc}")
 
 
-class CodexProvider(Provider):
-    name = "codex_sdk"
+class CodexHarness(Harness):
+    name = HarnessName.CODEX_SDK
 
     def __init__(
         self,
         api_key: str,
         model: str | None = None,
         timeout: float = MAX_TURN_TIMEOUT,
+        reasoning_effort: str = "medium",
     ):
         super().__init__(model=model, timeout=timeout)
         self.api_key = api_key
+        self.reasoning_effort = reasoning_effort  # see settings.py for the values
 
     def run_turn(
         self,
@@ -117,23 +121,21 @@ class CodexProvider(Provider):
         prompt: str,
         output_schema: dict,
         session_id: str | None = None,
-        fork_from: str | None = None,
         read_only: bool = False,
     ) -> TurnOutcome:
         try:
             with self._connect() as codex:
-                thread = self._open_thread(
-                    codex, workspace, session_id, fork_from, read_only
-                )
+                thread = self._open_thread(codex, workspace, session_id, read_only)
                 handle = thread.turn(
                     prompt,
                     output_schema=output_schema,
                     model=self.model,
-                    effort=REASONING_EFFORT,
+                    effort=self.reasoning_effort,
                 )
                 result = self._wait_for_result(handle)
         except AppError as exc:
-            raise self.tag(exc)
+            self.tag(exc)
+            raise
         except Exception as exc:
             raise self.tag(_translate(exc)) from exc
 
@@ -146,12 +148,14 @@ class CodexProvider(Provider):
         # edge case in case result was interrupted, don't want a false positive success
         if result.status != TurnStatus.completed:
             raise self.tag(
-                TurnFailed(f"turn ended as {result.status.value} (external)")
+                TurnFailedError(f"turn ended as {result.status.value} (external)")
             )
 
-        return TurnOutcome(text=result.final_response or "", session_id=thread.id)
+        return TurnOutcome(
+            text=result.final_response or "", session_id=thread.id, harness=self.name
+        )
 
-    def _wait_for_result(self, handle):
+    def _wait_for_result(self, handle: TurnHandle) -> TurnResult:
         """
         Wait for the turn, interrupting it if it outruns `self.timeout`.
 
@@ -172,7 +176,7 @@ class CodexProvider(Provider):
             result = handle.run()
         except Exception:
             if expired.is_set():
-                raise TurnTimeout(
+                raise TurnTimeoutError(
                     f"no result after {readable_duration(self.timeout)} (watchdog)"
                 ) from None
             raise
@@ -180,7 +184,7 @@ class CodexProvider(Provider):
             watchdog.cancel()
 
         if expired.is_set():  # interrupted cleanly rather than by raising
-            raise TurnTimeout(
+            raise TurnTimeoutError(
                 f"no result after {readable_duration(self.timeout)} (watchdog)"
             )
         return result
@@ -223,26 +227,23 @@ class CodexProvider(Provider):
         codex: Codex,
         workspace: Path,
         session_id: str | None,
-        fork_from: str | None,
         read_only: bool = False,
-    ):
+    ) -> Thread:
         """
-        Branch, continue, or start a conversation — see the module docstring.
+        Continue or start a conversation - see the module docstring.
 
         A stored session may be gone: pruned, or CODEX_HOME cleared. Codex says
         so here, before any turn runs, so we fall back to a fresh session and
-        lose the conversation history — never the work, which is on disk.
+        lose the conversation history - never the work, which is on disk.
         """
         sandbox = Sandbox.read_only if read_only else Sandbox.workspace_write
-        options = dict(cwd=str(workspace), sandbox=sandbox)
-        try:
-            if fork_from:
-                return codex.thread_fork(fork_from, **options)
-            if session_id:
+        options = {"cwd": str(workspace), "sandbox": sandbox}
+        if session_id:
+            try:
                 return codex.thread_resume(session_id, **options)
-        except InvalidRequestError:
-            print(
-                f"{self.tags} session {session_id or fork_from} not found — starting fresh",
-                flush=True,
-            )
+            except InvalidRequestError:
+                print(
+                    f"{self.tags} session {session_id} not found - starting fresh",
+                    flush=True,
+                )
         return codex.thread_start(**options)

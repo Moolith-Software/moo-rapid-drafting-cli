@@ -9,7 +9,7 @@ const draft = ref("");
 const busy = ref(false);
 const error = ref("");
 
-// Statuses that mean "still working" — we keep polling while any feature is
+// Statuses that mean "still working" - we keep polling while any feature is
 // here. Mirrors statuses.ACTIVE on the backend ("queued" is the immediate reply
 // from /features/add, before the row's own status is written).
 const ACTIVE = ["queued", "initialized", "preparing", "running"];

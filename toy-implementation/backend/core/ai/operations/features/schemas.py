@@ -7,7 +7,7 @@ Note: specific file changes are detected deterministically from the filesystem
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ....errors import BadOutput
+from core.errors import BadOutputError
 
 # OpenAI's strict structured outputs reject a schema unless it sets
 # `additionalProperties: false` and lists every property in `required`.
@@ -25,13 +25,13 @@ class FeatureSummary(BaseModel):
 
     model_config = _STRICT
 
-    feature_title: str = Field(
+    feature_title: str = Field(  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
         description="A short, clean, human-readable title for this feature (max one sentence)."
     )
     summary: str = Field(
         description="One or two plain-English sentences describing what was added."
     )
-    highlights: list[str] = _HIGHLIGHTS
+    highlights: list[str] = _HIGHLIGHTS  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
 
 
 class RefinementSummary(BaseModel):
@@ -48,7 +48,7 @@ class RefinementSummary(BaseModel):
         description="One or two plain-English sentences describing what this "
         "refinement changed about the existing feature."
     )
-    highlights: list[str] = _HIGHLIGHTS
+    highlights: list[str] = _HIGHLIGHTS  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
 
 
 class PrimingAck(BaseModel):
@@ -58,7 +58,7 @@ class PrimingAck(BaseModel):
 
     model_config = _STRICT
 
-    understood: bool = Field(description="Always true.")
+    understood: bool = Field(description="Always true.")  # noqa: V107 - a key in the JSON the model returns; never read as an attribute
 
 
 FEATURE_SCHEMA = FeatureSummary.model_json_schema()
@@ -87,16 +87,18 @@ def _parse(model: type[BaseModel], reply: str) -> dict:
 
     The schema constrains the reply, but it arrives as a *string* we still have
     to parse. A reply that does not match means the turn did not really produce
-    what we asked for — an agent that trailed off mid-thought, or a provider that
-    does not enforce schemas — so it raises rather than passing off prose as a
+    what we asked for - an agent that trailed off mid-thought, or a harness that
+    does not enforce schemas - so it raises rather than passing off prose as a
     summary.
     """
     if not reply.strip():
-        raise BadOutput("the AI returned an empty reply")
+        raise BadOutputError("the AI returned an empty reply")
 
     try:
         return model.model_validate_json(reply).model_dump()
     except ValidationError as exc:
         if any(error["type"] == "json_invalid" for error in exc.errors()):
-            raise BadOutput(f"reply was not valid JSON: {reply[:120]!r}") from exc
-        raise BadOutput(f"reply did not match the schema: {reply[:120]!r}") from exc
+            raise BadOutputError(f"reply was not valid JSON: {reply[:120]!r}") from exc
+        raise BadOutputError(
+            f"reply did not match the schema: {reply[:120]!r}"
+        ) from exc

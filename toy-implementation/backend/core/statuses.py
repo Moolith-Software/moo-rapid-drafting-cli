@@ -19,5 +19,6 @@ REFINING = "refining"  # the AI agent is changing one it already built
 COMPLETED = "completed"
 FAILED = "failed"
 
-# Still in flight — the frontend polls while a feature is in one of these.
-ACTIVE = (QUEUED, INITIALIZING, BUILDING, REFINING)
+# Still in flight, from the frontend's side: queued, initializing, building,
+# refining. The frontend keeps its own copy of this list and it has drifted.
+# ACTIVE = (QUEUED, INITIALIZING, BUILDING, REFINING)  # noqa: ERA001

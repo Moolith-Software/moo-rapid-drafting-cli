@@ -5,13 +5,23 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:backend": "npm run format:backend:check && npm run lint:backend && npm run types:backend && npm run deadcode:backend && npm run rules:backend",
+    "lint:backend": "cd ../backend && uv run --frozen ruff check .",
+    "format:backend": "cd ../backend && uv run --frozen ruff format .",
+    "format:backend:check": "cd ../backend && uv run --frozen ruff format --check .",
+    "types:backend": "cd ../backend && uv run --frozen mypy",
+    "deadcode:backend": "cd ../backend && uv run --frozen vulture",
+    "fix:backend": "cd ../backend && uv run --frozen python scripts/custom_rules.py --fix && uv run --frozen ruff check --fix . && uv run --frozen ruff format .",
+    "prepare": "cd ../.. && husky toy-implementation/frontend/.husky",
+    "rules:backend": "cd ../backend && uv run --frozen python scripts/custom_rules.py"
   },
   "dependencies": {
     "vue": "^3.5.13"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "husky": "^9.1.7",
     "typescript": "^5.6.0",
     "vite": "^6.0.0",
     "vue-tsc": "^2.1.0"

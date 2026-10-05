@@ -4,7 +4,7 @@ Deterministic change detection for a workspace.
 Codex edits files directly on disk rather than handing back a list of changes, so
 we work out what actually changed by hashing the tree before and after a turn and
 diffing the two snapshots. This is the source of truth for a feature's file
-changes — the model's own summary is narrative only and is never trusted here.
+changes - the model's own summary is narrative only and is never trusted here.
 
 We don't assume Workspaces are already git repos even if they might be,
 hence the hand-rolled snapshot instead of a git diff.
@@ -38,7 +38,7 @@ def diff_snapshots(before: dict, after: dict) -> list[dict]:
             changes.append({"path": path, "kind": "created"})
         elif before[path] != digest:
             changes.append({"path": path, "kind": "edited"})
-    for path in before:
-        if path not in after:
-            changes.append({"path": path, "kind": "deleted"})
+    changes.extend(
+        {"path": path, "kind": "deleted"} for path in before if path not in after
+    )
     return sorted(changes, key=lambda c: c["path"])

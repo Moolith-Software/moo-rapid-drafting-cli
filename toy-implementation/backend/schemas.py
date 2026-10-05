@@ -2,28 +2,29 @@
 API Contracts
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
-import constants
+from constants import limits
+from core.ai.harnesses import HarnessName
 
 # Basic Field Checks
 Request = Annotated[
     str,
     StringConstraints(
-        strip_whitespace=True, min_length=1, max_length=constants.MAX_REQUEST_CHARS
+        strip_whitespace=True, min_length=1, max_length=limits.MAX_REQUEST_CHARS
     ),
 ]
 
 
 class PreloadEnvironmentBody(BaseModel):
-    count: int = Field(1, ge=1, le=constants.MAX_ENVIRONMENTS)
+    count: int = Field(1, ge=1, le=limits.MAX_ENVIRONMENTS)
     parent_id: int | None = Field(None, ge=1)
 
 
 RequestBatch = Annotated[
-    list[Request], Field(min_length=1, max_length=constants.MAX_ADD_FEATURES)
+    list[Request], Field(min_length=1, max_length=limits.MAX_ADD_FEATURES)
 ]
 
 
@@ -43,7 +44,7 @@ class AddBody(BaseModel):
         json_schema_input_type=Request | RequestBatch,
     )
     @classmethod
-    def _wrap_single(cls, value):
+    def _wrap_single(cls, value: Any) -> Any:
         """
         Accept one request as a bare string and make it an array of one
         """
@@ -84,16 +85,17 @@ class FeatureResponse(BaseModel):
 
     id: int
     parent_id: int | None
-    code_folder_name: str
+    code_folder_name: str  # noqa: V107 - a SQL column and dict key; never read as an attribute
     feature: str
     file_changes: list[dict]
     summary: dict
     refinements: list[dict]
     status: str
     progress: str
-    codex_session_id: str | None
-    workspace_version: int
-    cloned_from_version: int | None
+    harness_session_id: str | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
+    harness: HarnessName | None
+    workspace_version: int  # noqa: V107 - a SQL column and dict key; never read as an attribute
+    cloned_from_version: int | None  # noqa: V107 - a SQL column and dict key; never read as an attribute
     created_at: float
 
 

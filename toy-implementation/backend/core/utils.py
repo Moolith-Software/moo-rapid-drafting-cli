@@ -2,10 +2,14 @@
 Small general methods that can be reused elsewhere
 """
 
+SECONDS_PER_MINUTE = 60
+
 
 def readable_duration(seconds: float) -> str:
     """Time limits are set in seconds; say them the way a person reads them."""
-    return f"{seconds / 60:.0f} minutes" if seconds >= 60 else f"{seconds:.0f}s"
+    if seconds >= SECONDS_PER_MINUTE:
+        return f"{seconds / SECONDS_PER_MINUTE:.0f} minutes"
+    return f"{seconds:.0f}s"
 
 
 def mentions(text: str, *patterns: str) -> bool:
