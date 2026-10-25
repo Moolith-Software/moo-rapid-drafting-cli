@@ -1,0 +1,32 @@
+schema: spec-driven
+
+context: |
+  This is a rapid drafting tool for AI-generated apps: features are drafted as
+  cheap, disposable copy-on-write branches with live previews, so users see
+  features before choosing them. The code lives in toy-implementation/ (a historical name).
+  dev-docs/ (repo root) describes what it is and how it works today. Read
+  dev-docs/proposal.md and dev-docs/design.md before proposing or designing a
+  change, and describe the change relative to them.
+  OpenSpec is used for changes only. Delta specs stay in the archived change as
+  its record; they are not synced into openspec/specs/.
+  Scope is toy-implementation/ only; the other root folders are not part of it.
+
+rules:
+  design:
+    - >-
+      End with a "## Dev docs impact" section listing each dev-docs/ file and
+      section this change alters and how (e.g. "design.md - API shape: adds
+      POST /core/projects", "design.md - Invariants: adds INV-26"), or "None".
+    - Refer to invariants by their INV- id from dev-docs/design.md; new ones take the next free number.
+
+operations:
+  archive:
+    guidance:
+      - >-
+        Before moving the change, apply its "Dev docs impact" to dev-docs/,
+        following the update rules in dev-docs/README.md. If the impact is
+        "None" or missing, say so and leave dev-docs/ unchanged.
+      - >-
+        Prefer "Archive without syncing" for delta specs; they stay in the
+        archived change and openspec/specs/ is not used.
+      - List the dev-docs/ sections that were updated in the archive summary.
