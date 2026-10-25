@@ -573,7 +573,7 @@ The intended setup: pytest in the backend `dev` group, under `backend/tests/`, r
 
 ### 12. Invariants and edge cases
 
-Each invariant and edge case is collected here to show where it's enforced and how it's tested. The **Spec requirement** and **Tests (tasks)** columns name the archived change that covers each row, as `<change>: <requirement>` and `<change> <task>`. They read "none yet" until a change adds one.
+Each invariant and edge case is collected here to show where it's enforced and how it's tested. The **Spec requirement** column names the living spec that covers each row, as `<capability>: <requirement>` in `openspec/specs/`; **Tests (tasks)** names the change and task that tested it, as `<change> <task>`. Both read "none yet" until a change adds one.
 
 **Terms used below.**
 
