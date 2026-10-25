@@ -1,7 +1,0 @@
-# Never commit a key from this folder, even if one gets dropped here.
-.env
-.env.*
-
-results.json
-__pycache__/
-.venv/

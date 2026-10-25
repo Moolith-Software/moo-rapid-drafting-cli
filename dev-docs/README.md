@@ -1,6 +1,6 @@
 # Dev docs
 
-What the rapid drafting tool is and how it works **today** (the code is in `toy-implementation/`). OpenSpec (`openspec/`) is only for changes; these files are the current state those changes build on.
+What the rapid drafting tool is and how it works **today**. OpenSpec (`openspec/`) is only for changes; these files are the current state those changes build on.
 
 | File | What it holds |
 |---|---|

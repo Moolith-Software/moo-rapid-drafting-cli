@@ -6,8 +6,6 @@ A rapid drafting tool for AI-generated applications. It helps people pick the hi
 
 Instead of debating features in a doc, you draft them. Drafting is the low-stakes part: each feature is a real, running change to your app, built by an AI agent on its own copy-on-write branch with a live preview, and it's cheap enough to throw away. You can draft hundreds or thousands of features on your own machine before any of them enters a real development workflow.
 
-The code lives in `toy-implementation/` for now. The folder name is historical; it's the working implementation, not a throwaway.
-
 ## Who it's for
 
 - Vibe coders and entrepreneurs exploring what to build.
@@ -55,7 +53,7 @@ A project is the app you draft features against. Two ways to start one:
 - **Import your project.** Bring an existing app; the tool prepares and sanitizes it so it works inside the tool, then builds the base every feature branches from. Planned, not built.
 - **Start from a template.** Create a new project from a starter template. Later.
 
-Today there is one built-in base app (`toy-implementation/base/`), and every feature branches from it.
+Today there is one built-in base app (`base/`), and every feature branches from it.
 
 ## What it does today
 

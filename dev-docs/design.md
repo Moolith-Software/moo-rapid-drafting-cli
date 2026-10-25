@@ -2,7 +2,7 @@
 
 ## Context
 
-This is how the rapid drafting tool works today. What it's for, and the primitives it supports (draft, refine, branch, go deep, combine), are in `proposal.md`. The code lives in `toy-implementation/` (a historical name), and paths below are relative to it unless they say otherwise.
+This is how the rapid drafting tool works today. What it's for, and the primitives it supports (draft, refine, branch, go deep, combine), are in `proposal.md`. Paths below are relative to the repository root.
 
 A **feature** is the unit throughout: one drafted change to the app, with its own branch and preview. Branching and going deep both create child features of an existing one.
 
@@ -46,7 +46,10 @@ Every request returns straight away. The slow work (cloning, the AI turn, starti
 ### 1. Repository layout and layers
 
 ```
-toy-implementation/
+./
+  README.md                  setup and run instructions (stale; see Decision 11)
+  dev-docs/                  these docs: how the system works today
+  openspec/                  proposed and archived changes
   base/                      seed Vue 3 + TS app; every workspace starts as a copy of it
   backend/
     main.py                  app setup, routes, startup/shutdown, the 503 handler
@@ -565,7 +568,7 @@ The intended setup: pytest in the backend `dev` group, under `backend/tests/`, r
   - `Feature` declares `codex_session_id`. The backend sends `harness_session_id`, plus `harness`, `workspace_version` and `cloned_from_version`, which the type doesn't declare.
   - `ACTIVE = ["queued", "initialized", "preparing", "running"]`, but the backend's in-flight states are `queued, initializing, building, refining`. Only `queued` overlaps, so polling stops while a feature is still building.
   - `BASE` is hardcoded to `http://localhost:8000`.
-- `toy-implementation/README.md` is also stale: old statuses and endpoints, and Python 3.11 where `pyproject.toml` requires 3.14.
+- The root `README.md` is also stale: old statuses and endpoints, and Python 3.11 where `pyproject.toml` requires 3.14.
 - `frontend/package.json` also hosts the backend's check scripts and the pre-push hook, so it's part of the backend's tooling even though it lives under `frontend/`.
 
 ### 12. Invariants and edge cases

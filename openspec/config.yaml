@@ -3,13 +3,14 @@ schema: spec-driven
 context: |
   This is a rapid drafting tool for AI-generated apps: features are drafted as
   cheap, disposable copy-on-write branches with live previews, so users see
-  features before choosing them. The code lives in toy-implementation/ (a historical name).
+  features before choosing them.
   dev-docs/ (repo root) describes what it is and how it works today. Read
   dev-docs/proposal.md and dev-docs/design.md before proposing or designing a
   change, and describe the change relative to them.
   OpenSpec is used for changes only. Delta specs stay in the archived change as
   its record; they are not synced into openspec/specs/.
-  Scope is toy-implementation/ only; the other root folders are not part of it.
+  The code is backend/ (FastAPI), frontend/ (Vue) and base/ (the seed app every
+  feature branches from).
 
 rules:
   design:

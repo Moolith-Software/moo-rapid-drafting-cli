@@ -13,7 +13,7 @@
     "types:backend": "cd ../backend && uv run --frozen mypy",
     "deadcode:backend": "cd ../backend && uv run --frozen vulture",
     "fix:backend": "cd ../backend && uv run --frozen python scripts/custom_rules.py --fix && uv run --frozen ruff check --fix . && uv run --frozen ruff format .",
-    "prepare": "cd ../.. && husky toy-implementation/frontend/.husky",
+    "prepare": "cd .. && husky frontend/.husky",
     "rules:backend": "cd ../backend && uv run --frozen python scripts/custom_rules.py"
   },
   "dependencies": {

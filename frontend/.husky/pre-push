@@ -12,4 +12,4 @@ fi
 
 # Not assuming the directory git happens to run hooks from.
 cd "$(git rev-parse --show-toplevel)" || exit 1
-npm --prefix toy-implementation/frontend run check:backend
+npm --prefix frontend run check:backend

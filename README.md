@@ -6,10 +6,12 @@ of a seed Vue 3 app. Status is tracked in **SQLite** and polled by a single-page
 **Vue 3 + TypeScript** frontend. Backend is **FastAPI**.
 
 ```
-toy-implementation/
-  base/        seed Vue 3 + TS app (a copy of ../toy-model, node_modules and all)
+./
+  base/        seed Vue 3 + TS app every feature branches from (node_modules and all)
   backend/     FastAPI + SQLite + the Feature Engine that drives Codex
   frontend/    single-page Vue 3 + TS UI
+  dev-docs/    how the system works today (start here)
+  openspec/    proposed and archived changes
 ```
 
 ## How it works
