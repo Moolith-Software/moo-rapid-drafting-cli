@@ -38,6 +38,8 @@ Title: `[type] Summary`, with the type in square brackets: `[feat]`, `[bugfix]`,
 
 The body has a short summary, anything to do after merging, and a test plan with what was and wasn't verified.
 
+**Keep it current.** Every time you push new commits to an open PR, update its description (and its title, if the scope changed) in the same step, so it always describes everything on the branch.
+
 ## Checks
 
 Run `npm --prefix frontend run check:backend` before pushing (ruff format, ruff lint, mypy, vulture, custom rules). The pre-push hook runs the same checks.
