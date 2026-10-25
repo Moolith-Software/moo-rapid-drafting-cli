@@ -1,18 +1,32 @@
+# Secrets
+backend/.env
+.env
+.env.local
+
+# Generated data
+backend/data/
+backend/workspaces/
+backend/.codex_home/
+.codex_playground_home/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node (base/ ships with node_modules for instant CoW clones; don't commit them)
 node_modules/
 dist/
 build/
 *.log
 
-# generated output of scripts/request-feature.mjs
-toy-model-generated/
+# Tool caches
+.mypy_cache/
+.ruff_cache/
 
-# secrets
-supabase/functions/.env
-.env
-.env.local
-
-# tauri (later)
+# Tauri (later)
 src-tauri/target/
 
-# os
+# OS
 .DS_Store

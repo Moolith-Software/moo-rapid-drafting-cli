@@ -1,0 +1,43 @@
+schema: spec-driven
+
+context: |
+  This is a rapid drafting tool for AI-generated apps: features are drafted as
+  cheap, disposable copy-on-write branches with live previews, so users see
+  features before choosing them.
+  dev-docs/ (repo root) is the high-level design: a human-readable overview of
+  what the application is and how it works today. Treat it as the baseline.
+  When exploring, proposing or designing a change, read dev-docs/proposal.md,
+  dev-docs/design.md and any related openspec/specs/ first, and describe the
+  change relative to them.
+  A change may challenge or replace what dev-docs/ describes; that is fine.
+  Say so in the design's "Dev docs impact" section rather than bending the
+  change to fit.
+  openspec/specs/ holds the required behavior of features added through
+  OpenSpec. It started empty, so most existing behavior is only in dev-docs/.
+  Archived changes are history, not authority: the current state is
+  dev-docs/, openspec/specs/ and the code.
+  The code is backend/ (FastAPI), frontend/ (Vue) and base/ (the seed app every
+  feature branches from).
+
+rules:
+  design:
+    - >-
+      End with a "## Dev docs impact" section listing each dev-docs/ file and
+      section this change alters and how (e.g. "design.md - API shape: adds
+      POST /core/projects", "design.md - Invariants: adds INV-26"), or "None".
+    - Refer to invariants by their INV- id from dev-docs/design.md; new ones take the next free number.
+
+operations:
+  apply:
+    guidance:
+      - >-
+        Before changing code, check the dev-docs/ sections and openspec/specs/
+        the change touches, in case either moved on since the change was planned.
+  archive:
+    guidance:
+      - >-
+        Sync the change's delta specs into openspec/specs/, then apply its
+        "Dev docs impact" to dev-docs/, following the update rules in
+        dev-docs/README.md. If the impact is "None" or missing, say so and
+        leave dev-docs/ unchanged.
+      - List the synced specs and the updated dev-docs/ sections in the archive summary.

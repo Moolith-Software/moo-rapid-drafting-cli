@@ -2,16 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "toy-model-generated",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "toy-model-generated"],
-      "port": 5173,
-      "autoPort": true
+      "name": "backend",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--frozen", "--directory", "backend", "uvicorn", "main:app", "--port", "8000"],
+      "port": 8000
     },
     {
-      "name": "toy-frontend",
+      "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "toy-implementation/frontend"],
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
       "port": 5173,
       "autoPort": true
     }
