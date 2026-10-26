@@ -10,7 +10,7 @@ New features and real changes go through OpenSpec: `/opsx:explore` to think, `/o
   1. Run `/opsx:update` to reconcile the artifacts with each other. It's an agent's judgment, so it can take a couple of rounds; repeat until it has nothing left to change.
   2. Then run `openspec validate <change> --strict`. This is the deterministic check, and the gate: the change isn't ready until it passes. If fixing a validation error changes meaning, go back to step 1.
 - Every change's `design.md` ends with a `## Dev docs impact` section. Archiving syncs the delta specs into `openspec/specs/`, then edits `dev-docs/` in place (rules in `dev-docs/README.md`).
-- Build a change one task group at a time, and commit each group on its own.
+- Build a change one milestone (task group) at a time. When a milestone is done: run the AI review loop, then hand it to the developer to review. Commit the whole milestone as **one commit, only when the developer says so**, then start the next milestone. Never commit without that go-ahead.
 
 ## Commits
 
