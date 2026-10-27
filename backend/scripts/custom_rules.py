@@ -5,7 +5,10 @@ Ruff cannot host these. Its rules are compiled into the binary and it has no
 plugin API, so the only user-defined surfaces it offers are banned imports and
 banned module attributes. Anything pattern-based has to live here.
 
-Add a rule by adding one line to RULES. Codes share the CR prefix, which must
+CR002 is structural rather than a pattern, so it is its own check below: an
+`__init__.py` holds only a docstring, imports and `__all__`, never logic.
+
+Add a pattern rule by adding one line to RULES. Codes share the CR prefix, which must
 stay listed in ruff's `lint.external`. Without it ruff reports `# noqa: CR001`
 as an invalid rule code, and since that rule is auto-fixable it deletes the
 comment rather than failing.
@@ -17,6 +20,7 @@ Silence one line by putting `noqa: <code>` anywhere in it, in whatever comment
 syntax that file uses.
 """
 
+import ast
 import re
 import sys
 from dataclasses import dataclass
@@ -87,6 +91,30 @@ def report(path: Path, text: str) -> list[str]:
     return found
 
 
+def init_logic(path: Path, text: str) -> list[str]:
+    """CR002: an __init__.py holds a docstring, imports and __all__, nothing else."""
+    if path.name != "__init__.py":
+        return []
+    lines = text.splitlines()
+    return [
+        f"{path.relative_to(ROOT)}:{node.lineno}:{node.col_offset + 1}: CR002 "
+        "logic in __init__.py; move it into a module and import it here"
+        for node in ast.parse(text).body
+        if not is_wiring(node) and not ignored(lines[node.lineno - 1], "CR002")
+    ]
+
+
+def is_wiring(node: ast.stmt) -> bool:
+    """A docstring, an import, or the __all__ list."""
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return True
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+        return isinstance(node.value.value, str)
+    return isinstance(node, ast.Assign) and [
+        t.id for t in node.targets if isinstance(t, ast.Name)
+    ] == ["__all__"]
+
+
 def fixed(text: str) -> str:
     """The same text with every mechanical fix applied, respecting opt-outs."""
     lines = text.splitlines(keepends=True)
@@ -105,7 +133,7 @@ def main() -> int:
 
     for path in sources():
         text = path.read_text(encoding="utf-8")
-        found = report(path, text)
+        found = report(path, text) + init_logic(path, text)
         if not found:
             continue
         total += len(found)
@@ -118,7 +146,7 @@ def main() -> int:
         print(f"custom_rules: fixed {total}")
         return 0
     if total:
-        print(f"custom_rules: {total} violation(s) in {len(RULES)} rule(s)")
+        print(f"custom_rules: {total} violation(s)")
         return 1
     return 0
 
