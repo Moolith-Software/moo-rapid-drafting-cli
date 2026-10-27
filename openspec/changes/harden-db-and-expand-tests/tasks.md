@@ -9,7 +9,7 @@ Each milestone ends with Claude running the review loop (`make review-round`, fr
 - [ ] 1.3 Remove the `check:backend` scripts from `frontend/package.json`, point `frontend/.husky/pre-push` at `make check`; verify a push runs `make check`
 - [ ] 1.4 Add `pytest` and `httpx` to the backend `dev` group and a minimal `backend/tests/conftest.py` with a temp-database fixture; verify `make test` runs and passes with one smoke test
 - [ ] 1.5 Introduce `create_app(env=None)` in `main.py`, keeping `app = create_app()` for uvicorn; verify `make start` and `make dev` boot and `/docs` is served only by `make dev`
-- [ ] 1.6 Update `CLAUDE.md` (checks: `make check`, `make test`), `README.md` (setup and run via `make`) and the checks named in the review loop (`CLAUDE.md` and `.claude/commands/review-milestone.md`); verify the documented commands run as written
+- [ ] 1.6 Update `CLAUDE.md` (checks: `make check`, `make test`), `README.md` (setup and run via `make`) and the checks named in the review loop (`CLAUDE.md` and `.claude/commands/re.md`); verify the documented commands run as written
 - [ ] 1.7 Run the review loop for M1 (`make review-round`, per `CLAUDE.md`) and address the findings; verify checks are green and the severity-ordered report is posted
 
 ## 2. M2 - Database hardening

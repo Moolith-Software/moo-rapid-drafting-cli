@@ -8,7 +8,7 @@ Almost every rule in `dev-docs/design.md` (INV-01 to INV-25) is enforced only by
 
 Built layer by layer, in five milestones:
 
-- **M1 Tooling.** A `Makefile` as the single entry point (`setup`, `start`, `dev`, `check`, `fix`, `test`, `test-cow`, `test-live`, `reset-db`); the backend checks move out of `frontend/package.json`; `scripts/custom_rules.py` is renamed `custom_linting_rules.py`; the app is built by `create_app(...)` so tests can start it in any mode; pytest with a minimal temp-database fixture.
+- **M1 Tooling.** The root `Makefile` (created by `add-ai-review-loop`) becomes the single entry point (`setup`, `start`, `dev`, `check`, `fix`, `test`, `test-cow`, `test-live`, `reset-db`); the backend checks move out of `frontend/package.json`; `scripts/custom_rules.py` is renamed `custom_linting_rules.py`; the app is built by `create_app(...)` so tests can start it in any mode; pytest with a minimal temp-database fixture.
 - **M2 Database hardening.** The initial schema (`0001`, edited in place, no migration) gains CHECK constraints, a unique index and triggers, so the database refuses invalid states, illegal status transitions, changes to fixed columns, and the two lifecycle races. A refused lifecycle write becomes a new `ConflictError` (3002), returned as **409**. A direct-SQL test proves each rule.
 - **M3 Test foundation.** Fixtures grow to temp workspaces, the mock harness and a deferred executor; `database/` tests for the concurrency rules, rollback, migrations and restart persistence; `harness/` tests of the harness contract against the mock; `settings/` tests for the dev/prod switch and harness selection.
 - **M4 Test apps and API.** Test apps stored as zips on a private R2 bucket and pulled by `make setup`; the mock harness can replay recorded multi-file changes; `api/` tests for every success and error code; one golden-path test of the whole flow.
@@ -34,7 +34,8 @@ None.
 ## Impact
 
 - Backend: `migrations/0001_create_features.sql`, `repositories/database.py`, `core/errors.py`, `main.py` (`create_app`), the mock harness (replay), `scripts/custom_linting_rules.py`, `pyproject.toml` (pytest, httpx, boto3 in the dev group).
-- New: `Makefile`, `backend/tests/`, `testapps/manifest.json`, `.github/workflows/`.
+- New: `backend/tests/`, `testapps/manifest.json`, `.github/workflows/`.
+- Changed: the root `Makefile`, extended with the project's commands.
 - Tooling: `frontend/package.json` loses its backend scripts; the pre-push hook calls `make check`.
 - Docs: `CLAUDE.md`, `README.md`, `dev-docs/` (via the Dev docs impact).
 - Needs: R2 credentials for test apps (local `.env`, CI secrets), and an OpenAI key as a CI secret for the live-AI suite.

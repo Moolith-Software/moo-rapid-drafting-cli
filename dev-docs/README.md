@@ -6,6 +6,7 @@ A high-level, human-readable overview of what the rapid drafting tool is and how
 |---|---|
 | `proposal.md` | What the system is, who it's for, what it does today, what it doesn't do yet |
 | `design.md` | How it works: layout, data flow, data model, API shape, errors, invariants, edge cases, frontend, testing, risks |
+| `reviewing.md` | Guidelines for the AI reviewer that checks each milestone before the developer reviews it |
 
 ## How this fits with OpenSpec
 
