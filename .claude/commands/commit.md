@@ -36,7 +36,7 @@ Flag anything that probably should not be committed, and leave it to the develop
 Reply with:
 
 1. One line on what the commit contains.
-2. The command, in a single `bash` block, using a heredoc so the multiline message stays readable and pastes in one go:
+2. **To read and to paste into a terminal:** the command in a `bash` block, using a heredoc so the multiline message stays readable:
 
 ```bash
 git add -A && git commit -F - <<'EOF'
@@ -49,7 +49,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 EOF
 ```
 
-If the work should be split into several commits, give each its own block, with `git add <paths>` instead of `git add -A`.
+3. **To run here:** the same commit as a single-line `bash` block, which the app shows with a Run button. Each paragraph is its own `-m`; the bullets use `$'...'`, where `\n` is a line break and a literal `'` is written `\'`. It must produce exactly the same message as the readable version:
 
-3. Any flags from step 3.
-4. Ask whether to run it here, or whether they will paste it into their terminal. Only run it if they say so; when they do, run exactly the command shown.
+```bash
+git add -A && git commit -m 'type(scope): summary' -m $'- what changed and why\n- ...' -m 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'
+```
+
+If the work should be split into several commits, give each its own pair of blocks, with `git add <paths>` instead of `git add -A`.
+
+4. Any flags from step 3.
+5. Ask whether to run it here, or whether they will paste it into their terminal. Only run it if they say so; when they do, run exactly the command shown.
